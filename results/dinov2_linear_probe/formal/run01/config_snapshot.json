@@ -1,0 +1,93 @@
+{
+  "experiment_name": "dinov2_small_cifar100_linear_probe",
+  "runtime": {
+    "device": "auto",
+    "dtype": "float32",
+    "seed": 42
+  },
+  "data": {
+    "train_dir": "vis_transformer/CIFAR-100-dataset-main/train",
+    "test_dir": "vis_transformer/CIFAR-100-dataset-main/test",
+    "original_image_size": [
+      32,
+      32
+    ],
+    "num_classes": 100,
+    "create_validation_split": false
+  },
+  "model": {
+    "provider": "huggingface_transformers",
+    "model_id": "facebook/dinov2-small",
+    "revision": "ed25f3a31f01632728cabb09d1542f84ab7b0056",
+    "freeze_backbone": true,
+    "backbone_eval_mode": true,
+    "feature_source": "cls_token",
+    "head": {
+      "type": "linear",
+      "bias": true
+    },
+    "trust_remote_code": false,
+    "attention_implementation": "eager"
+  },
+  "preprocessing": {
+    "source": "official_pretrained_image_processor",
+    "random_augmentation": false
+  },
+  "dataloader": {
+    "batch_size": 8,
+    "num_workers": 0,
+    "pin_memory": false,
+    "train_shuffle": true,
+    "test_shuffle": false
+  },
+  "training": {
+    "epochs": 10,
+    "loss": "cross_entropy",
+    "optimizer": {
+      "name": "adamw",
+      "learning_rate": 0.001,
+      "weight_decay": 0.01
+    },
+    "trainable_parameters": "head_only",
+    "validation_enabled": false,
+    "early_stopping_enabled": false,
+    "checkpoint_policy": "latest_and_final"
+  },
+  "evaluation": {
+    "split": "test",
+    "run_during_training": false,
+    "top_k": [
+      1,
+      5
+    ]
+  },
+  "output": {
+    "root_dir": "results/dinov2_linear_probe",
+    "checkpoint_dir": "checkpoints/dinov2_linear_probe",
+    "cache_dir": ".cache/dinov2"
+  },
+  "provenance": {
+    "official_repository": "https://github.com/facebookresearch/dinov2",
+    "official_model_card": "https://huggingface.co/facebook/dinov2-small",
+    "license": "Apache-2.0",
+    "course_transformers_range": ">=4.56.0,<5"
+  },
+  "workflow": {
+    "mode": "smoke",
+    "smoke": {
+      "train_samples": 32,
+      "test_samples": 16,
+      "epochs": 2
+    },
+    "preview_batch_size": 2,
+    "prediction_top_k": 5
+  },
+  "formal_training": {
+    "run_name": "run01",
+    "feature_batch_size": 8,
+    "head_batch_size": 256,
+    "resume": true,
+    "feature_cache_dir": ".cache/dinov2_features",
+    "feature_progress_every_batches": 100
+  }
+}
