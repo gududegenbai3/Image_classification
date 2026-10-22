@@ -6,8 +6,8 @@
     "seed": 42
   },
   "data": {
-    "train_dir": "vis_transformer/CIFAR-100-dataset-main/train",
-    "test_dir": "vis_transformer/CIFAR-100-dataset-main/test",
+    "train_dir": "dataset/train",
+    "test_dir": "dataset/test",
     "original_image_size": [
       32,
       32

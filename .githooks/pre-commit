@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+python3 tools/sync_docs.py --staged
+if ! git diff --quiet -- README.md AGENTS.md; then
+    echo '项目结构文档已同步或存在未暂存编辑；请检查并暂存 README.md、AGENTS.md 后重新提交。' >&2
+    exit 1
+fi
+
