@@ -28,11 +28,14 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 ├── AGENTS.md
 ├── README.md
 ├── checkpoints/
-│   └── dinov2_linear_probe/
+│   ├── dinov2_linear_probe/
+│   │   └── …
+│   └── dinov3_vitl16_JackChen070421/
 │       └── …
 ├── configs/
 │   ├── dinov2_linear_probe.json
-│   └── dinov2_small_gududegenbai3.json
+│   ├── dinov2_small_gududegenbai3.json
+│   └── dinov3_vitl16_JackChen070421.json
 ├── dataset/
 │   ├── README.md
 │   ├── test/
@@ -41,7 +44,8 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │       └── …
 ├── models/
 │   ├── README.md
-│   └── dinov2_small_gududegenbai3.py
+│   ├── dinov2_small_gududegenbai3.py
+│   └── dinov3_vitl16_JackChen070421.py
 ├── pipeline/
 │   ├── __init__.py
 │   ├── __main__.py
@@ -52,7 +56,9 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   └── runner.py
 ├── requirements.txt
 ├── results/
-│   └── dinov2_linear_probe/
+│   ├── dinov2_linear_probe/
+│   │   └── …
+│   └── dinov3_vitl16_JackChen070421/
 │       └── …
 ├── tests/
 │   └── test_workflow.py
@@ -82,6 +88,8 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 - `models/README.md`：说明参与者如何命名和提交模型、实现哪些函数、分别保存哪些产物。
 - `models/dinov2_small_gududegenbai3.py`：该参与者的单文件模型实现，组合 DINOv2 主干和线性分类头，提供构建模型、加载参数和输出 logits 的函数；配置与权重从外部传入。
 - `configs/dinov2_small_gududegenbai3.json`：新公共流程使用的配置，记录模型身份、运行编号、数据路径、预训练版本、本地缓存位置、冻结策略、训练超参数和输出目录。
+- `models/dinov3_vitl16_JackChen070421.py`：DINOv3 ViT-L/16 冻结主干 + MLP 分类头的单文件实现；特征为 `[CLS]` 与 patch 均值（排除 4 个 register token）分别 L2 归一化后拼接。
+- `configs/dinov3_vitl16_JackChen070421.json`：该模型的配置，固定 DINOv3 的 40 位 revision、本地预训练缓存、冻结策略与输出路径。
 - `configs/dinov2_linear_probe.json`：历史基线的参考配置，保留旧实验的工作流和参数格式；数据路径已修正，但不直接作为新公共命令的配置入口。
 
 ### 公共训练与评估代码
@@ -105,7 +113,7 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 
 下列文件由新公共流程按 `model_key` 和 `run_id` 隔离保存；文档列出它们的用途，不表示已经完成了新的全量训练。
 
-- `checkpoints/<model_key>/<run_id>/final.pt`：训练结束保存的权重文件，包含完整模型 `state_dict`、模型身份、类别映射和配置；不包含优化器恢复状态。
+- `checkpoints/<model_key>/<run_id>/final.pt`：训练结束保存的权重文件，通常包含完整模型 `state_dict`、模型身份、类别映射和配置；冻结大主干时也可只保存分类头并由配置固定主干版本（如 DINOv3 提交），不包含优化器恢复状态。
 - `results/<model_key>/<run_id>/config_snapshot.json`：这次运行实际使用的配置快照，包括命令行覆盖后的运行编号。
 - `results/<model_key>/<run_id>/class_to_idx.json`：类别名称到整数索引的映射，用于解释输出列和混淆矩阵，并校验权重与数据是否匹配。
 - `results/<model_key>/<run_id>/history.json`：逐轮训练准确率、损失和耗时；单独评估时为空列表。
@@ -151,7 +159,7 @@ predict(model, inputs) -> logits
 ```
 
 配置由调用方读取 JSON 后传入，权重由路径加载；`inputs` 为已预处理的批量图像，`logits` 为 `[batch_size, num_classes]` 的未归一化分类分数。
-数据读取、训练调度与指标计算由公共流程负责。已由 `pipeline/` 实现公共流程，当前模型代码为 `models/dinov2_small_gududegenbai3.py`。
+数据读取、训练调度与指标计算由公共流程负责。已由 `pipeline/` 实现公共流程，当前模型代码为 `models/dinov2_small_gududegenbai3.py` 与 `models/dinov3_vitl16_JackChen070421.py`。
 
 新模型的交付路径约定如下，尖括号为待替换的占位符：
 
@@ -203,6 +211,29 @@ results/<model_key>/<run_id>/history.json
 上述为当前实验结果。正式分类头权重位于 `checkpoints/dinov2_linear_probe/formal/run01/final.pt`，配置和评估记录位于 `results/dinov2_linear_probe/formal/run01/`。预测时需加载同一版本的官方 DINOv2 主干。后续实验沿用统一的测试集记录成果。
 
 评估文件 [metrics.json](results/dinov2_linear_probe/formal/run01/metrics.json) 已包含 100×100 混淆矩阵；训练记录见 [history.json](results/dinov2_linear_probe/formal/run01/history.json)。历史实验未按新命名约定记录 GitHub 用户名，保留原名，不推断贡献者身份；新提交按上述约定执行。
+
+### DINOv3 ViT-L/16 + MLP 分类头（JackChen070421）
+
+- 预训练模型：[facebook/dinov3-vitl16-pretrain-lvd1689m](https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m)，固定 revision `ea8dc2863c51be0a264bab82070e3e8836b02d51`。
+- 训练方式：冻结主干，缓存 `[CLS] + patch 均值` 的 2048 维特征，训练 `2048 → 512 → 100` 的 MLP 分类头（LayerNorm + GELU + Dropout 0.3）。
+- 训练数据：50,000 张训练图片（其中 45,000 训练、5,000 验证），最佳验证准确率 93.30%。
+- 测试数据：完整 10,000 张测试图片，公共流程单次前向（无 TTA）。
+- 测试 Top-1 准确率：**93.24%**。
+- 测试交叉熵：**0.3465**。
+- 权重：`checkpoints/dinov3_vitl16_JackChen070421/run01/final.pt`（4.2 MB，仅保存分类头；冻结主干按配置中的 revision 从 `.cache/pretrained/` 恢复）。
+- 评估记录：`results/dinov3_vitl16_JackChen070421/eval01/`。
+
+该权重沿用历史基线的“仅分类头”封装：ViT-L 完整 `state_dict` 约 1.2 GB，超过 GitHub 单文件限制且仓库未启用 LFS；主干由固定 revision 保证可复现，`final.pt` 仍包含模型身份、类别映射和完整配置。训练在本地特征缓存流程中完成，测试指标由公共 `pipeline evaluate` 重新计算，口径与仓库一致。
+
+复现时先准备固定版本主干，再评估已提交权重：
+
+```sh
+# DINOv3 在 Hugging Face 上是 gated 模型，需先 hf auth login 并同意模型协议
+python -m pipeline prepare --config configs/dinov3_vitl16_JackChen070421.json
+python -m pipeline evaluate --config configs/dinov3_vitl16_JackChen070421.json --run-id eval02 --checkpoint checkpoints/dinov3_vitl16_JackChen070421/run01/final.pt
+```
+
+复评请使用新的 `run_id`（如 `eval02`），不要覆盖已提交的 `eval01`。
 
 ## 环境与使用
 

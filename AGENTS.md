@@ -41,11 +41,14 @@
 ├── AGENTS.md
 ├── README.md
 ├── checkpoints/
-│   └── dinov2_linear_probe/
+│   ├── dinov2_linear_probe/
+│   │   └── …
+│   └── dinov3_vitl16_JackChen070421/
 │       └── …
 ├── configs/
 │   ├── dinov2_linear_probe.json
-│   └── dinov2_small_gududegenbai3.json
+│   ├── dinov2_small_gududegenbai3.json
+│   └── dinov3_vitl16_JackChen070421.json
 ├── dataset/
 │   ├── README.md
 │   ├── test/
@@ -54,7 +57,8 @@
 │       └── …
 ├── models/
 │   ├── README.md
-│   └── dinov2_small_gududegenbai3.py
+│   ├── dinov2_small_gududegenbai3.py
+│   └── dinov3_vitl16_JackChen070421.py
 ├── pipeline/
 │   ├── __init__.py
 │   ├── __main__.py
@@ -65,7 +69,9 @@
 │   └── runner.py
 ├── requirements.txt
 ├── results/
-│   └── dinov2_linear_probe/
+│   ├── dinov2_linear_probe/
+│   │   └── …
+│   └── dinov3_vitl16_JackChen070421/
 │       └── …
 ├── tests/
 │   └── test_workflow.py
@@ -132,13 +138,14 @@ results/<model_key>/<run_id>/history.json
 3. 根据改动进行必要验证；结构变化时同步两份根目录文档的可维护内容，再检查路径与说明一致。
 4. 交付时说明改动、验证情况与尚未实现的部分，不将接口约定描述成可运行功能。
 
-当前已接入 `models/dinov2_small_gududegenbai3.py` 与同名 JSON 配置。统一命令：
+当前已接入 `models/dinov2_small_gududegenbai3.py`、`models/dinov3_vitl16_JackChen070421.py` 与同名 JSON 配置。统一命令：
 
 ```sh
 python -m pipeline validate --config configs/dinov2_small_gududegenbai3.json
 python -m pipeline prepare --config configs/dinov2_small_gududegenbai3.json
 python -m pipeline train --config configs/dinov2_small_gududegenbai3.json --run-id run01
 python -m pipeline evaluate --config configs/dinov2_small_gududegenbai3.json --run-id eval01 --checkpoint checkpoints/dinov2_small_gududegenbai3/run01/final.pt
+python -m pipeline evaluate --config configs/dinov3_vitl16_JackChen070421.json --run-id eval01 --checkpoint checkpoints/dinov3_vitl16_JackChen070421/run01/final.pt
 ```
 
 - `validate` 不导入模型、不依赖 PyTorch，检查配置、路径、类别映射和接口声明；实际函数签名在运行时检查。
