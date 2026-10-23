@@ -212,7 +212,7 @@ results/<model_key>/<run_id>/history.json
 
 评估文件 [metrics.json](results/dinov2_linear_probe/formal/run01/metrics.json) 已包含 100×100 混淆矩阵；训练记录见 [history.json](results/dinov2_linear_probe/formal/run01/history.json)。历史实验未按新命名约定记录 GitHub 用户名，保留原名，不推断贡献者身份；新提交按上述约定执行。
 
-### DINOv3 ViT-L/16 + MLP 分类头（JackChen070421）
+### DINOv3 ViT-L/16 + MLP 分类头（JackChen070421）· v1 无数据增强
 
 - 预训练模型：[facebook/dinov3-vitl16-pretrain-lvd1689m](https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m)，固定 revision `ea8dc2863c51be0a264bab82070e3e8836b02d51`。
 - 训练方式：冻结主干，缓存 `[CLS] + patch 均值` 的 2048 维特征，训练 `2048 → 512 → 100` 的 MLP 分类头（LayerNorm + GELU + Dropout 0.3）。
@@ -234,6 +234,33 @@ python -m pipeline evaluate --config configs/dinov3_vitl16_JackChen070421.json -
 ```
 
 复评请使用新的 `run_id`（如 `eval02`），不要覆盖已提交的 `eval01`。
+
+### v2 数据增强版（水平镜像，run02_aug）
+
+在 v1 基础上，把训练集与 `dataset_mirror/` 的 50,000 张水平镜像合并后重新训练：
+原图与镜像用硬链接合并（镜像文件加 `mirror__` 前缀），按 9:1 分层得到 90,000 训练 / 10,000 验证；
+测试集保持原始 10,000 张，未参与训练。
+
+| 版本 | 训练数据 | 测试 Top-1（公共流程） | 本地 TTA Top-1 | 测试交叉熵 | 权重 / 记录 |
+| --- | --- | --- | --- | --- | --- |
+| v1 无增强 | 50,000（45k/5k） | 93.24% | 93.46% | 0.3465 | `run01` / `eval01` |
+| v2 水平镜像 | 100,000（90k/10k） | **93.53%** | **93.78%** | 0.3936 | `run02_aug` / `eval02_aug` |
+
+- v2 测试 Top-1 提升 **+0.29 个百分点**（无 TTA），TTA 提升 **+0.32**。
+- v2 验证准确率 99.27%，但镜像与原图可能被随机分到 train/val 两侧，**验证集存在同图泄漏**，该数字偏乐观；测试集干净，上表测试指标可信。
+- 交叉熵上升（0.3465 → 0.3936），说明预测分布更保守，与更强的数据多样性有关。
+- v2 权重：`checkpoints/dinov3_vitl16_JackChen070421/run02_aug/final.pt`；评估记录：`results/dinov3_vitl16_JackChen070421/eval02_aug/`。
+
+复现 v2 评估：
+
+```sh
+python -m pipeline evaluate --config configs/dinov3_vitl16_JackChen070421.json \
+  --run-id eval03_aug --checkpoint checkpoints/dinov3_vitl16_JackChen070421/run02_aug/final.pt
+```
+
+`configs/dinov3_vitl16_JackChen070421.json` 新增了 `data.augmentation` 等说明字段，
+记录增强数据来源与合并方式；v1 的 `results/dinov3_vitl16_JackChen070421/eval01/config_snapshot.json`
+保持原样，不受影响。
 
 ## 环境与使用
 
