@@ -1,0 +1,25 @@
+{
+  "recipe": "dinov3-cifar100-last2blocks-supervised-aug224-v1",
+  "script_sha256": "14cc95fd19584c438581efb91c4c7f151dbdec7f32fafa811400ab8a7018808e",
+  "weights_sha256": "dcb2e45127cccbf1601e5f42fef165eea275c8e5213197e8dcf3f48822718179",
+  "config_sha256": "135ecd23e34a70b6fbed8b083fdecb319b7e3a54e3d849258bbe4ddcf1783bb5",
+  "processor_sha256": "960c41d1f3a7778b936365769a2d90550b318a6c0a53a0296957adacfe5e0dd7",
+  "seed": 42,
+  "schedule_epochs": 3,
+  "microbatch": 64,
+  "accumulation": 1,
+  "backbone_lr": 1e-05,
+  "head_lr": 0.001,
+  "weight_decay": 0.01,
+  "optimizer": "AdamW",
+  "gradient_clip_norm": 1.0,
+  "precision": "FP16 backbone autocast; FP32 classifier and parameters; GradScaler",
+  "training_augmentation": "RandomCrop32Padding4+HorizontalFlip+Resize224",
+  "warm_start": "validation head refitted on 45k only; final head on all 50k",
+  "trainable_blocks_zero_based": [
+    22,
+    23
+  ],
+  "final_layernorm_frozen": true,
+  "baseline_classifier_sha256": "9bfb137984362fe3785039972aa6395002219ff186b6be99b0d35ff5d12a127f"
+}

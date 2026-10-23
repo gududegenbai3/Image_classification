@@ -1,0 +1,11 @@
+{
+  "baseline_test_top1_percent": 93.22,
+  "last4_test_top1_percent": 92.94,
+  "difference_percentage_points": -0.28,
+  "difference_correct_examples": -28,
+  "baseline_val_top1_percent": 93.34,
+  "last4_val_top1_percent": 93.6,
+  "improved": false,
+  "preferred_run": "vitl16_linear_seed42",
+  "seed": 42
+}

@@ -1,0 +1,17 @@
+{
+  "verified": true,
+  "feature_shape": [
+    2,
+    5120
+  ],
+  "normalized_hidden_states_reference_max_abs_diff": 0.0,
+  "baseline_feature_tail_max_abs_diff": 0.0,
+  "hf_hidden_state_count": 25,
+  "backbone_frozen": true,
+  "layer_order": [
+    20,
+    21,
+    22,
+    23
+  ]
+}

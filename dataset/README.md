@@ -57,3 +57,11 @@ python3 -m pipeline validate --config configs/dinov2_small_gududegenbai3.json
 ```
 
 本地预训练文件由单独的 `prepare` 命令准备，不写入原始数据目录。完整训练与评估步骤见根目录 [README.md](../README.md)。
+
+## DINOv3 提交的数据核对
+
+`yjqsh233` 的历史实验读取官方 CIFAR-100 Python 归档（MD5 `eb9058c3a382ffc7106e4002c42a8d85`）。本次提交按原始文件名将全部图片编码成 PNG，逐张核对仓库 Git blob SHA1：训练 50,000 张和测试 10,000 张全部字节一致。证据见 `results/dinov3_vitl16_yjqsh233/dataset_identity.json`；提交不修改原始图片或标签。
+
+超参数选择在官方训练集中按 seed 42 分层选取 45,000/5,000，具体原归档索引保存在各运行的 `split.json`。冻结分类头选定超参数后在完整 50,000 张训练集上重新拟合。最后两层微调使用 45,000 张训练、5,000 张验证；未选中第 1–3 轮，保留第 0 轮，并用完整训练集分类头进行测试。其测试分数不能视为微调提升。
+
+历史评估采用 PIL 双线性直接缩放至 224×224，再按 ImageNet 均值/标准差归一化。它与公共 HF processor 的数值路径可能有差别；复核历史评分时还需区分保存的 FP16 特征缓存与在线图像推理。类别映射与仓库按类别名排序的 100 类索引一致。

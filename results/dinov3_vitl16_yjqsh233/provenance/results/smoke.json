@@ -1,0 +1,14 @@
+{
+  "smoke_passed": true,
+  "batch_size": 16,
+  "feature_shape": [
+    16,
+    2048
+  ],
+  "loss": 4.57663631439209,
+  "processor_max_abs_difference": 0.015008926391601562,
+  "forward_seconds": 0.16701390594244003,
+  "images_per_second": 95.80040601837231,
+  "peak_allocated_gib": 1.2619404792785645,
+  "gpu": "Tesla T4"
+}

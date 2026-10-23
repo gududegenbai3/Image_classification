@@ -1,0 +1,7 @@
+{
+  "checked_png_images": 60000,
+  "exact_git_blob_matches": 60000,
+  "all_images_byte_identical": true,
+  "first_mismatches": [],
+  "method": "Canonical CIFAR pixels and original filenames encoded with PIL PNG, compared to upstream Git blob SHA1"
+}

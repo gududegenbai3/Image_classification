@@ -1,0 +1,7 @@
+{
+  "lr": 0.01,
+  "weight_decay": 0.0,
+  "epoch": 23,
+  "val_top1_percent": 93.34,
+  "val_loss": 0.2318119110107422
+}

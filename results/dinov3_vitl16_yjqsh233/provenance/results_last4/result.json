@@ -1,0 +1,16 @@
+{
+  "test_top1_percent": 92.94,
+  "test_loss": 0.2320456329345703,
+  "test_examples": 10000,
+  "correct": 9294,
+  "refit_train_examples": 50000,
+  "selection": {
+    "lr": 0.01,
+    "weight_decay": 0.001,
+    "epoch": 14,
+    "val_top1_percent": 93.6,
+    "val_loss": 0.233150927734375
+  },
+  "protocol": "dinov3-cifar100-frozen-last4cls-patchmean-pil224-v1",
+  "seed": 42
+}

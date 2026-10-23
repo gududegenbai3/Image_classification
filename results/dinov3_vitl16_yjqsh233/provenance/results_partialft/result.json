@@ -1,0 +1,17 @@
+{
+  "test_top1_percent": 93.22,
+  "test_loss": 0.22771202836036683,
+  "test_examples": 10000,
+  "correct": 9322,
+  "refit_train_examples": 50000,
+  "selection": {
+    "epoch": 0,
+    "val_top1_percent": 93.34,
+    "val_loss": 0.2318124780654907
+  },
+  "seed": 42,
+  "protocol": "dinov3-cifar100-last2blocks-supervised-aug224-v1",
+  "backbone_lr": 1e-05,
+  "head_lr": 0.001,
+  "refit_epochs": 0
+}

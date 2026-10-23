@@ -1,0 +1,9 @@
+{
+  "result_and_log_agree": true,
+  "selection_matches_validation_history": true,
+  "split_disjoint_and_complete": true,
+  "source_hash_matches_remote_run": true,
+  "local_and_remote_backbone_hash_match": true,
+  "smoke_passed": true,
+  "classifier_downloaded": true
+}

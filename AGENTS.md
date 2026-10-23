@@ -11,6 +11,7 @@
 - 当前本地根目录：`/Users/fjy/Desktop/Image_classfication`；协作者以各自克隆目录为准，代码与配置使用仓库相对路径。
 - 数据：现有 CIFAR-100，100 类，训练集 50,000 张、测试集 10,000 张。
 - 已有基线：冻结 DINOv2-Small 主干，训练线性分类头；历史成果保留原路径。
+- DINOv3 提交：`dinov3_vitl16_yjqsh233` 保存两种冻结特征方案及最后两层微调的候选/保留方案，详见根目录 README 和对应结果目录说明。
 - 两个核心域指职责域及其目录，不是两个单独文件：数据域负责数据；模型域负责模型代码、配置、参数及评分。
 
 <!-- OWNER_ONLY_RULES_START -->
@@ -41,11 +42,14 @@
 ├── AGENTS.md
 ├── README.md
 ├── checkpoints/
-│   └── dinov2_linear_probe/
+│   ├── dinov2_linear_probe/
+│   │   └── …
+│   └── dinov3_vitl16_yjqsh233/
 │       └── …
 ├── configs/
 │   ├── dinov2_linear_probe.json
-│   └── dinov2_small_gududegenbai3.json
+│   ├── dinov2_small_gududegenbai3.json
+│   └── dinov3_vitl16_yjqsh233.json
 ├── dataset/
 │   ├── README.md
 │   ├── test/
@@ -54,7 +58,8 @@
 │       └── …
 ├── models/
 │   ├── README.md
-│   └── dinov2_small_gududegenbai3.py
+│   ├── dinov2_small_gududegenbai3.py
+│   └── dinov3_vitl16_yjqsh233.py
 ├── pipeline/
 │   ├── __init__.py
 │   ├── __main__.py
@@ -65,9 +70,13 @@
 │   └── runner.py
 ├── requirements.txt
 ├── results/
-│   └── dinov2_linear_probe/
+│   ├── dinov2_linear_probe/
+│   │   └── …
+│   └── dinov3_vitl16_yjqsh233/
 │       └── …
 ├── tests/
+│   ├── test_dinov3_evidence.py
+│   ├── test_dinov3_submission.py
 │   └── test_workflow.py
 └── tools/
     └── sync_docs.py
@@ -151,4 +160,14 @@ python -m pipeline evaluate --config configs/dinov2_small_gududegenbai3.json --r
 结构文档由 `python3 tools/sync_docs.py` 同步生成标记内的目录树；其他职责及接口说明仍由 AI 随变更维护。`--check` 只校验，`--staged` 以 Git 暂存区为准。
 `.githooks/pre-commit` 自动同步暂存结构，若文档出现未暂存变更则阻止提交，要求先检查并暂存；新克隆需执行 `git config core.hooksPath .githooks`。CI 校验目录树、测试与语法。
 同步器只修改 `PROJECT_STRUCTURE` 标记内的内容，并核对所有者专属区原文不变。
+
+## DINOv3 历史实验提交
+
+贡献者已确认 GitHub 用户名为 `yjqsh233`。模型、基础配置、参数和评分均使用 `dinov3_vitl16_yjqsh233`；四个独立运行目录对应三组实验，禁止将微调第 3 轮的验证集评分写成测试集评分。
+
+- 模型适配器仅在显式 `load_weights` 时加载参数。紧凑 `final.pt` 依赖配置指定版本及 SHA256 的 Meta 预训练主干；冻结方案只含分类头与特征归一化统计，微调候选另含最后两层参数。
+- `results/dinov3_vitl16_yjqsh233/README.md` 解释选择、重拟合、预处理及历史复评过程；`dataset_identity.json` 记录全部 60,000 张 PNG 与原实验图片的字节核对。
+- 每次运行提供固定权重评分、逐样本预测、原始整数混淆矩阵、配置、类别映射、训练历史、划分、环境与状态。`provenance/` 保留原实验源码文本及其哈希，供审计；模型加载仍只有 `models/` 下的单文件入口。
+- 公共流程使用 HF 预处理和 AdamW，历史实验使用 PIL resize、缓存特征 SGD 或分组 AdamW；不要把公共 `train` 命令称为历史训练的精确复现。历史评分的评估路径以每个 `metrics.json` 为准。
+- `tests/test_dinov3_submission.py` 检查微型模型接口；`tests/test_dinov3_evidence.py` 核对真实评分、混淆矩阵、逐样本预测及参数哈希。DINOv3 许可位于 `checkpoints/dinov3_vitl16_yjqsh233/LICENSE.md`。
 

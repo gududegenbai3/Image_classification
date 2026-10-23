@@ -4,7 +4,7 @@
 
 本项目由多人协作，使用公开预训练视觉模型提取图像特征，通过训练新的分类头完成 CIFAR-100 图像分类，并在此基础上逐步探索更先进的模型。
 
-当前采用“冻结预训练主干、只训练输出分类层”的迁移学习方案，以保留已有特征、降低训练成本。当前成果为图像分类模型。
+目前包含冻结主干的 DINOv2、DINOv3 线性分类实验，以及 DINOv3 最后两层微调的验证记录。不同实验的训练和选择过程分别保存。
 
 ## 协作入口与项目位置
 
@@ -28,11 +28,14 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 ├── AGENTS.md
 ├── README.md
 ├── checkpoints/
-│   └── dinov2_linear_probe/
+│   ├── dinov2_linear_probe/
+│   │   └── …
+│   └── dinov3_vitl16_yjqsh233/
 │       └── …
 ├── configs/
 │   ├── dinov2_linear_probe.json
-│   └── dinov2_small_gududegenbai3.json
+│   ├── dinov2_small_gududegenbai3.json
+│   └── dinov3_vitl16_yjqsh233.json
 ├── dataset/
 │   ├── README.md
 │   ├── test/
@@ -41,7 +44,8 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │       └── …
 ├── models/
 │   ├── README.md
-│   └── dinov2_small_gududegenbai3.py
+│   ├── dinov2_small_gududegenbai3.py
+│   └── dinov3_vitl16_yjqsh233.py
 ├── pipeline/
 │   ├── __init__.py
 │   ├── __main__.py
@@ -52,9 +56,13 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   └── runner.py
 ├── requirements.txt
 ├── results/
-│   └── dinov2_linear_probe/
+│   ├── dinov2_linear_probe/
+│   │   └── …
+│   └── dinov3_vitl16_yjqsh233/
 │       └── …
 ├── tests/
+│   ├── test_dinov3_evidence.py
+│   ├── test_dinov3_submission.py
 │   └── test_workflow.py
 └── tools/
     └── sync_docs.py
@@ -71,7 +79,7 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 
 - `README.md`：面向团队成员的项目入口，说明项目目标、文件职责、运行命令、协作方式和已有成果。
 - `AGENTS.md`：面向 AI 的操作规范，规定问题定位、命名、接口、评分及文档同步方式；其中所有者专属规则区只能由项目所有者本人手动修改。
-- `requirements.txt`：Python 运行依赖清单。PyTorch 负责训练与推理，Transformers 提供 DINOv2 和图像预处理，Hugging Face Hub 负责显式下载预训练文件，Pillow 读取图片，safetensors 加载预训练张量参数。通过 `python -m pip install -r requirements.txt` 安装；这是版本范围约束，不是完整依赖锁文件。
+- `requirements.txt`：Python 运行依赖清单。PyTorch 负责训练与推理，Transformers 提供 DINOv2、DINOv3 和图像预处理，Hugging Face Hub 负责显式下载预训练文件，Pillow 读取图片，safetensors 加载预训练张量参数。通过 `python -m pip install -r requirements.txt` 安装；这是版本范围约束，不是完整依赖锁文件。
 - `.gitignore`：忽略虚拟环境、预训练缓存、Python 字节码和系统生成文件，避免把这些本地产物新增到版本管理中。
 
 ### 数据与模型文件
@@ -83,6 +91,8 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 - `models/dinov2_small_gududegenbai3.py`：该参与者的单文件模型实现，组合 DINOv2 主干和线性分类头，提供构建模型、加载参数和输出 logits 的函数；配置与权重从外部传入。
 - `configs/dinov2_small_gududegenbai3.json`：新公共流程使用的配置，记录模型身份、运行编号、数据路径、预训练版本、本地缓存位置、冻结策略、训练超参数和输出目录。
 - `configs/dinov2_linear_probe.json`：历史基线的参考配置，保留旧实验的工作流和参数格式；数据路径已修正，但不直接作为新公共命令的配置入口。
+- `models/dinov3_vitl16_yjqsh233.py`：DINOv3 ViT-L/16 单文件适配器，支持末层 CLS 与 patch 均值、最后四层 CLS 与 patch 均值，以及最后两层微调；构建和权重加载分离。
+- `configs/dinov3_vitl16_yjqsh233.json`：DINOv3 基础配置；各已提交实验以各自 `config_snapshot.json` 为准，公共 AdamW 流程不会自动重现历史 SGD 缓存训练。
 
 ### 公共训练与评估代码
 
@@ -100,16 +110,18 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 - `.githooks/pre-commit`：本地 Git 提交检查，自动按暂存区同步目录树；如果文档存在未暂存修改，则阻止提交并提示先检查、暂存。需设置 `core.hooksPath` 才会启用。
 - `.github/workflows/checks.yml`：GitHub CI 配置，在推送或拉取请求时检查目录文档、测试与 Python 语法，并在安装依赖的任务中运行离线微型 DINOv2 集成测试。
 - `tests/test_workflow.py`：验证指标计算、模型身份与接口、路径限制、类别映射、防覆盖、文档同步，以及微型网络的训练、权重保存和复评流程。
+- `tests/test_dinov3_submission.py`：以本地微型 DINOv3 检查特征拼接、紧凑权重加载和冻结行为。
+- `tests/test_dinov3_evidence.py`：检查提交的类别映射、逐样本预测、混淆矩阵、评分和权重哈希是否一致。
 
 ### 新运行产生的文件
 
 下列文件由新公共流程按 `model_key` 和 `run_id` 隔离保存；文档列出它们的用途，不表示已经完成了新的全量训练。
 
-- `checkpoints/<model_key>/<run_id>/final.pt`：训练结束保存的权重文件，包含完整模型 `state_dict`、模型身份、类别映射和配置；不包含优化器恢复状态。
+- `checkpoints/<model_key>/<run_id>/final.pt`：公共训练保存完整 `state_dict`；本次 DINOv3 历史提交保存分类头、归一化统计及实际训练的主干层，加载时需要固定版本的外部预训练主干。两种格式均记录身份、类别映射和配置，不包含优化器状态。
 - `results/<model_key>/<run_id>/config_snapshot.json`：这次运行实际使用的配置快照，包括命令行覆盖后的运行编号。
 - `results/<model_key>/<run_id>/class_to_idx.json`：类别名称到整数索引的映射，用于解释输出列和混淆矩阵，并校验权重与数据是否匹配。
 - `results/<model_key>/<run_id>/history.json`：逐轮训练准确率、损失和耗时；单独评估时为空列表。
-- `results/<model_key>/<run_id>/metrics.json`：最终测试评分，包括 accuracy、平均交叉熵、原始混淆矩阵、样本数及被评估权重的路径和哈希。
+- `results/<model_key>/<run_id>/metrics.json`：相应 `split` 的评分，包括 accuracy、平均交叉熵、原始混淆矩阵、样本数及被评估权重的路径和哈希；验证集评分不能当作测试集评分。
 - `results/<model_key>/<run_id>/environment.json`：Python、系统、设备、依赖版本、Git 版本状态、模型源码哈希及输入权重来源等复现信息。
 - `results/<model_key>/<run_id>/status.json`：运行状态，区分运行中、完成和失败；发生异常时记录错误信息。
 
@@ -203,6 +215,21 @@ results/<model_key>/<run_id>/history.json
 上述为当前实验结果。正式分类头权重位于 `checkpoints/dinov2_linear_probe/formal/run01/final.pt`，配置和评估记录位于 `results/dinov2_linear_probe/formal/run01/`。预测时需加载同一版本的官方 DINOv2 主干。后续实验沿用统一的测试集记录成果。
 
 评估文件 [metrics.json](results/dinov2_linear_probe/formal/run01/metrics.json) 已包含 100×100 混淆矩阵；训练记录见 [history.json](results/dinov2_linear_probe/formal/run01/history.json)。历史实验未按新命名约定记录 GitHub 用户名，保留原名，不推断贡献者身份；新提交按上述约定执行。
+
+## DINOv3 ViT-L/16：yjqsh233
+
+模型为 Meta `facebook/dinov3-vitl16-pretrain-lvd1689m`，固定版本 `ea8dc2863c51be0a264bab82070e3e8836b02d51`。原实验在单张 Tesla T4 16GB、Python 3.12、PyTorch 2.8.0+cu128 上完成。全部 60,000 张原实验图片与仓库 PNG 的 Git blob 哈希一致。
+
+| 运行目录（`results/dinov3_vitl16_yjqsh233/` 下） | 数据划分 | Top-1 | 平均交叉熵 |
+| --- | --- | --- | --- |
+| `linear_seed42_20261023`：末层 CLS + patch 均值 | 测试 10,000 | 93.22% | 0.2277118073 |
+| `last4_seed42_20261023`：末四层 CLS + patch 均值 | 测试 10,000 | 92.94% | 0.2320456329 |
+| `partialft_epoch3_val_20261023`：最后两层微调第 3 轮候选 | 验证 5,000 | 93.30% | 0.2616679520 |
+| `partialft_selected0_20261023`：验证选择保留第 0 轮 | 测试 10,000 | 93.22% | 0.2277120284 |
+
+微调第 1–3 轮均未超过第 0 轮的 93.34% 验证准确率。第 3 轮候选没有测试集评分；保留方案的测试分数来自原主干与完整训练集重新拟合的分类头，不能归因于微调提升。各目录含真实 100×100 混淆矩阵、逐样本预测、配置、历史、划分、环境和参数哈希。
+
+详细协议、权重依赖、复核方式及精度差异见 [实验记录](results/dinov3_vitl16_yjqsh233/README.md)。DINOv3 紧凑参数保存在同名 `checkpoints/` 子目录，需先准备固定版本的外部主干；[DINOv3 License](checkpoints/dinov3_vitl16_yjqsh233/LICENSE.md) 随参数提供。已有 DINOv2 成果继续保留。
 
 ## 环境与使用
 

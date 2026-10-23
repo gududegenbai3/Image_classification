@@ -1,0 +1,15 @@
+{
+  "baseline_test_top1_percent": 93.22,
+  "selected_epoch0_test_top1_percent": 93.22,
+  "fine_tuned_candidate_test_top1_percent": null,
+  "candidate_validation_top1_by_epoch": {
+    "0": 93.34,
+    "1": 92.36,
+    "2": 93.24,
+    "3": 93.3
+  },
+  "selected_epoch": 0,
+  "improved": false,
+  "preferred_run": "vitl16_linear_seed42",
+  "scope": "single_seed_single_configuration_three_epochs"
+}
