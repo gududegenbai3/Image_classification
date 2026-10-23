@@ -57,3 +57,9 @@ python3 -m pipeline validate --config configs/dinov2_small_gududegenbai3.json
 ```
 
 本地预训练文件由单独的 `prepare` 命令准备，不写入原始数据目录。完整训练与评估步骤见根目录 [README.md](../README.md)。
+
+## 水平镜像增强集
+
+根目录的 `dataset_mirror/<类别>/<原文件名>.png` 为本训练集的水平镜像副本：100 个类别，每类 500 张，共 50,000 张 32×32 PNG 图片。类别目录和图片文件名与 `dataset/train/` 一一对应，标签不变。
+生成后已逐张核对像素为原图的左右翻转，并核对原图文件哈希未变；`dataset/test/` 未参与变换。
+该目录只保存增强图片，生成过程未留下脚本。原训练集与镜像集仍分别保存，当前训练配置未自动接入镜像集。
