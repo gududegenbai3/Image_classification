@@ -26,6 +26,7 @@
 记录预训练来源与版本、代码版本、依赖和运行环境；不得用示例分数充当实验结果。
 
 当前已接入 `dinov2_small_gududegenbai3.py`，配置为 `configs/dinov2_small_gududegenbai3.json`，公共入口为 `python -m pipeline`。
+当前也已接入 `dinov3_vitl16_JackChen070421.py`，配置为 `configs/dinov3_vitl16_JackChen070421.json`；其 `final.pt` 仅保存分类头，冻结主干按配置中的固定 revision 从预训练缓存恢复。
 模型通过本地配置构建，预训练权重由公共 `prepare` 命令单独准备，`load_weights` 负责加载本地预训练目录或新格式运行权重。
 冻结主干时，即使训练流程调用 `model.train()`，主干仍保持 eval 模式；`predict` 返回 logits，梯度及训练/评估上下文由公共流程控制。
 公共流程将配置中的预训练路径解析为绝对路径后传入模型；配置快照保留仓库相对路径。
