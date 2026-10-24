@@ -1,0 +1,16 @@
+{
+  "python": "3.13.5",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "device": "cuda",
+  "dependencies": {
+    "torch": "2.11.0+cu128",
+    "transformers": "5.20.2",
+    "Pillow": "11.1.0",
+    "safetensors": "0.8.0"
+  },
+  "git_commit": "6edb9d08cfd0672e0e5ddbe17d748900620dedfc",
+  "git_dirty": true,
+  "model_source_sha256": "b09325e0770eeb0f29ca2e622bb0e27b814d7452ebde5a7ce51ae11d831e6970",
+  "input_weights": "checkpoints\\dinov3_vitl16_JackChen070421\\run02_aug\\final.pt",
+  "input_weights_sha256": "278290a1beaec416509b23ed5698373e292840d388511197e68cee6701ec5c63"
+}

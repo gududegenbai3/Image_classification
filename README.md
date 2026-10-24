@@ -31,11 +31,13 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── dinov2_linear_probe/
 │   │   └── …
 │   └── dinov3_vitl16_yjqsh233/
+│   └── dinov3_vitl16_JackChen070421/
 │       └── …
 ├── configs/
 │   ├── dinov2_linear_probe.json
 │   ├── dinov2_small_gududegenbai3.json
 │   └── dinov3_vitl16_yjqsh233.json
+│   └── dinov3_vitl16_JackChen070421.json
 ├── dataset/
 │   ├── README.md
 │   ├── test/
@@ -247,6 +249,7 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── README.md
 │   ├── dinov2_small_gududegenbai3.py
 │   └── dinov3_vitl16_yjqsh233.py
+│   └── dinov3_vitl16_JackChen070421.py
 ├── pipeline/
 │   ├── __init__.py
 │   ├── __main__.py
@@ -260,6 +263,7 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── dinov2_linear_probe/
 │   │   └── …
 │   └── dinov3_vitl16_yjqsh233/
+│   └── dinov3_vitl16_JackChen070421/
 │       └── …
 ├── tests/
 │   ├── test_dinov3_evidence.py
@@ -292,6 +296,8 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 - `models/README.md`：说明参与者如何命名和提交模型、实现哪些函数、分别保存哪些产物。
 - `models/dinov2_small_gududegenbai3.py`：该参与者的单文件模型实现，组合 DINOv2 主干和线性分类头，提供构建模型、加载参数和输出 logits 的函数；配置与权重从外部传入。
 - `configs/dinov2_small_gududegenbai3.json`：新公共流程使用的配置，记录模型身份、运行编号、数据路径、预训练版本、本地缓存位置、冻结策略、训练超参数和输出目录。
+- `models/dinov3_vitl16_JackChen070421.py`：DINOv3 ViT-L/16 冻结主干 + MLP 分类头的单文件实现；特征为 `[CLS]` 与 patch 均值（排除 4 个 register token）分别 L2 归一化后拼接。
+- `configs/dinov3_vitl16_JackChen070421.json`：该模型的配置，固定 DINOv3 的 40 位 revision、本地预训练缓存、冻结策略与输出路径。
 - `configs/dinov2_linear_probe.json`：历史基线的参考配置，保留旧实验的工作流和参数格式；数据路径已修正，但不直接作为新公共命令的配置入口。
 - `models/dinov3_vitl16_yjqsh233.py`：DINOv3 ViT-L/16 单文件适配器，支持末层 CLS 与 patch 均值、最后四层 CLS 与 patch 均值，以及最后两层微调；构建和权重加载分离。
 - `configs/dinov3_vitl16_yjqsh233.json`：DINOv3 基础配置；各已提交实验以各自 `config_snapshot.json` 为准，公共 AdamW 流程不会自动重现历史 SGD 缓存训练。
@@ -320,6 +326,7 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 下列文件由新公共流程按 `model_key` 和 `run_id` 隔离保存；文档列出它们的用途，不表示已经完成了新的全量训练。
 
 - `checkpoints/<model_key>/<run_id>/final.pt`：公共训练保存完整 `state_dict`；本次 DINOv3 历史提交保存分类头、归一化统计及实际训练的主干层，加载时需要固定版本的外部预训练主干。两种格式均记录身份、类别映射和配置，不包含优化器状态。
+- `checkpoints/<model_key>/<run_id>/final.pt`：训练结束保存的权重文件，通常包含完整模型 `state_dict`、模型身份、类别映射和配置；冻结大主干时也可只保存分类头并由配置固定主干版本（如 DINOv3 提交），不包含优化器恢复状态。
 - `results/<model_key>/<run_id>/config_snapshot.json`：这次运行实际使用的配置快照，包括命令行覆盖后的运行编号。
 - `results/<model_key>/<run_id>/class_to_idx.json`：类别名称到整数索引的映射，用于解释输出列和混淆矩阵，并校验权重与数据是否匹配。
 - `results/<model_key>/<run_id>/history.json`：逐轮训练准确率、损失和耗时；单独评估时为空列表。
@@ -365,7 +372,7 @@ predict(model, inputs) -> logits
 ```
 
 配置由调用方读取 JSON 后传入，权重由路径加载；`inputs` 为已预处理的批量图像，`logits` 为 `[batch_size, num_classes]` 的未归一化分类分数。
-数据读取、训练调度与指标计算由公共流程负责。已由 `pipeline/` 实现公共流程，当前模型代码为 `models/dinov2_small_gududegenbai3.py`。
+数据读取、训练调度与指标计算由公共流程负责。已由 `pipeline/` 实现公共流程，当前模型代码为 `models/dinov2_small_gududegenbai3.py` 与 `models/dinov3_vitl16_JackChen070421.py`。
 
 新模型的交付路径约定如下，尖括号为待替换的占位符：
 
@@ -432,6 +439,55 @@ results/<model_key>/<run_id>/history.json
 微调第 1–3 轮均未超过第 0 轮的 93.34% 验证准确率。第 3 轮候选没有测试集评分；保留方案的测试分数来自原主干与完整训练集重新拟合的分类头，不能归因于微调提升。各目录含真实 100×100 混淆矩阵、逐样本预测、配置、历史、划分、环境和参数哈希。
 
 详细协议、权重依赖、复核方式及精度差异见 [实验记录](results/dinov3_vitl16_yjqsh233/README.md)。DINOv3 紧凑参数保存在同名 `checkpoints/` 子目录，需先准备固定版本的外部主干；[DINOv3 License](checkpoints/dinov3_vitl16_yjqsh233/LICENSE.md) 随参数提供。已有 DINOv2 成果继续保留。
+### DINOv3 ViT-L/16 + MLP 分类头（JackChen070421）· v1 无数据增强
+
+- 预训练模型：[facebook/dinov3-vitl16-pretrain-lvd1689m](https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m)，固定 revision `ea8dc2863c51be0a264bab82070e3e8836b02d51`。
+- 训练方式：冻结主干，缓存 `[CLS] + patch 均值` 的 2048 维特征，训练 `2048 → 512 → 100` 的 MLP 分类头（LayerNorm + GELU + Dropout 0.3）。
+- 训练数据：50,000 张训练图片（其中 45,000 训练、5,000 验证），最佳验证准确率 93.30%。
+- 测试数据：完整 10,000 张测试图片，公共流程单次前向（无 TTA）。
+- 测试 Top-1 准确率：**93.24%**。
+- 测试交叉熵：**0.3465**。
+- 权重：`checkpoints/dinov3_vitl16_JackChen070421/run01/final.pt`（4.2 MB，仅保存分类头；冻结主干按配置中的 revision 从 `.cache/pretrained/` 恢复）。
+- 评估记录：`results/dinov3_vitl16_JackChen070421/eval01/`。
+
+该权重沿用历史基线的“仅分类头”封装：ViT-L 完整 `state_dict` 约 1.2 GB，超过 GitHub 单文件限制且仓库未启用 LFS；主干由固定 revision 保证可复现，`final.pt` 仍包含模型身份、类别映射和完整配置。训练在本地特征缓存流程中完成，测试指标由公共 `pipeline evaluate` 重新计算，口径与仓库一致。
+
+复现时先准备固定版本主干，再评估已提交权重：
+
+```sh
+# DINOv3 在 Hugging Face 上是 gated 模型，需先 hf auth login 并同意模型协议
+python -m pipeline prepare --config configs/dinov3_vitl16_JackChen070421.json
+python -m pipeline evaluate --config configs/dinov3_vitl16_JackChen070421.json --run-id eval02 --checkpoint checkpoints/dinov3_vitl16_JackChen070421/run01/final.pt
+```
+
+复评请使用新的 `run_id`（如 `eval02`），不要覆盖已提交的 `eval01`。
+
+### v2 数据增强版（水平镜像，run02_aug）
+
+在 v1 基础上，把训练集与 `dataset_mirror/` 的 50,000 张水平镜像合并后重新训练：
+原图与镜像用硬链接合并（镜像文件加 `mirror__` 前缀），按 9:1 分层得到 90,000 训练 / 10,000 验证；
+测试集保持原始 10,000 张，未参与训练。
+
+| 版本 | 训练数据 | 测试 Top-1（公共流程） | 本地 TTA Top-1 | 测试交叉熵 | 权重 / 记录 |
+| --- | --- | --- | --- | --- | --- |
+| v1 无增强 | 50,000（45k/5k） | 93.24% | 93.46% | 0.3465 | `run01` / `eval01` |
+| v2 水平镜像 | 100,000（90k/10k） | **93.53%** | **93.78%** | 0.3936 | `run02_aug` / `eval02_aug` |
+
+- v2 测试 Top-1 提升 **+0.29 个百分点**（无 TTA），TTA 提升 **+0.32**。
+- v2 验证准确率 99.27%，但镜像与原图可能被随机分到 train/val 两侧，**验证集存在同图泄漏**，该数字偏乐观；测试集干净，上表测试指标可信。
+- 交叉熵上升（0.3465 → 0.3936），说明预测分布更保守，与更强的数据多样性有关。
+- v2 权重：`checkpoints/dinov3_vitl16_JackChen070421/run02_aug/final.pt`；评估记录：`results/dinov3_vitl16_JackChen070421/eval02_aug/`。
+
+复现 v2 评估：
+
+```sh
+python -m pipeline evaluate --config configs/dinov3_vitl16_JackChen070421.json \
+  --run-id eval03_aug --checkpoint checkpoints/dinov3_vitl16_JackChen070421/run02_aug/final.pt
+```
+
+`configs/dinov3_vitl16_JackChen070421.json` 新增了 `data.augmentation` 等说明字段，
+记录增强数据来源与合并方式；v1 的 `results/dinov3_vitl16_JackChen070421/eval01/config_snapshot.json`
+保持原样，不受影响。
 
 ## 环境与使用
 
