@@ -1,0 +1,25 @@
+{
+  "python": "3.12.3",
+  "torch": "2.8.0+cu128",
+  "torchvision": "0.23.0+cu128",
+  "transformers": "4.57.6",
+  "numpy": "2.3.2",
+  "cuda_runtime": "12.8",
+  "gpu": "Tesla T4",
+  "arguments": {
+    "mode": "run",
+    "model_dir": "/root/autodl-tmp/dinov3-cifar100/models/dinov3-vitl16",
+    "data_dir": "/root/autodl-tmp/dinov3-cifar100/data",
+    "baseline_run": "/root/autodl-tmp/dinov3-cifar100/runs/vitl16_linear_seed42",
+    "run_dir": "/root/autodl-tmp/dinov3-cifar100/runs/vitl16_partialft_seed42",
+    "seed": 42,
+    "epochs": 3,
+    "batch_size": 64,
+    "eval_batch_size": 64,
+    "accumulation": 1,
+    "workers": 4,
+    "backbone_lr": 1e-05,
+    "head_lr": 0.001,
+    "weight_decay": 0.01
+  }
+}

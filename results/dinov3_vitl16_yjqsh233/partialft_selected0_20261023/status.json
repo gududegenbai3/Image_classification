@@ -1,0 +1,7 @@
+{
+  "state": "complete",
+  "operation": "historical_fixed_weight_evidence_export",
+  "selected": true,
+  "official_test_evaluation": "complete",
+  "validation_selected_epoch": 0
+}

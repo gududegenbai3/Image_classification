@@ -1,0 +1,11 @@
+{
+  "result_and_log_agree": true,
+  "selection_matches_full_validation_history": true,
+  "split_identical_to_baseline": true,
+  "backbone_and_preprocessing_hashes_match_baseline": true,
+  "classifier_training_routines_unchanged": true,
+  "local_sources_match_both_remote_runs": true,
+  "normalized_multilayer_features_verified": true,
+  "smoke_passed": true,
+  "classifier_downloaded": true
+}

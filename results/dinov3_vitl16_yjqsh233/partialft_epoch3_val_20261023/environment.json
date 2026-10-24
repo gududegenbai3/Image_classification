@@ -1,0 +1,60 @@
+{
+  "historical_environment": {
+    "python": "3.12.3",
+    "torch": "2.8.0+cu128",
+    "torchvision": "0.23.0+cu128",
+    "transformers": "4.57.6",
+    "numpy": "2.3.2",
+    "cuda_runtime": "12.8",
+    "gpu": "Tesla T4",
+    "arguments": {
+      "mode": "run",
+      "model_dir": "/root/autodl-tmp/dinov3-cifar100/models/dinov3-vitl16",
+      "data_dir": "/root/autodl-tmp/dinov3-cifar100/data",
+      "baseline_run": "/root/autodl-tmp/dinov3-cifar100/runs/vitl16_linear_seed42",
+      "run_dir": "/root/autodl-tmp/dinov3-cifar100/runs/vitl16_partialft_seed42",
+      "seed": 42,
+      "epochs": 3,
+      "batch_size": 64,
+      "eval_batch_size": 64,
+      "accumulation": 1,
+      "workers": 4,
+      "backbone_lr": 1e-05,
+      "head_lr": 0.001,
+      "weight_decay": 0.01
+    }
+  },
+  "historical_identity": {
+    "recipe": "dinov3-cifar100-last2blocks-supervised-aug224-v1",
+    "script_sha256": "14cc95fd19584c438581efb91c4c7f151dbdec7f32fafa811400ab8a7018808e",
+    "weights_sha256": "dcb2e45127cccbf1601e5f42fef165eea275c8e5213197e8dcf3f48822718179",
+    "config_sha256": "135ecd23e34a70b6fbed8b083fdecb319b7e3a54e3d849258bbe4ddcf1783bb5",
+    "processor_sha256": "960c41d1f3a7778b936365769a2d90550b318a6c0a53a0296957adacfe5e0dd7",
+    "seed": 42,
+    "schedule_epochs": 3,
+    "microbatch": 64,
+    "accumulation": 1,
+    "backbone_lr": 1e-05,
+    "head_lr": 0.001,
+    "weight_decay": 0.01,
+    "optimizer": "AdamW",
+    "gradient_clip_norm": 1.0,
+    "precision": "FP16 backbone autocast; FP32 classifier and parameters; GradScaler",
+    "training_augmentation": "RandomCrop32Padding4+HorizontalFlip+Resize224",
+    "warm_start": "validation head refitted on 45k only; final head on all 50k",
+    "trainable_blocks_zero_based": [
+      22,
+      23
+    ],
+    "final_layernorm_frozen": true,
+    "baseline_classifier_sha256": "9bfb137984362fe3785039972aa6395002219ff186b6be99b0d35ff5d12a127f"
+  },
+  "model_source_sha256": "c3429d8fc3ff1bc38bd6b56165dcfa5175598806301b1a3113a07ac686e622d7",
+  "source_checkpoint_sha256": "2749bb9f4e121c8016342116e8f703ddb93f055926b8a9a4da314dcc54a3fad7",
+  "exported_checkpoint_sha256": "5dfd60a1e6982517e521f03c65760cff163ca52f34699f0c630f2a144dd9758e",
+  "adapter_reference_max_abs_difference_on_two_images": 0.0,
+  "pretrained_revision": "ea8dc2863c51be0a264bab82070e3e8836b02d51",
+  "pretrained_weights_sha256": "dcb2e45127cccbf1601e5f42fef165eea275c8e5213197e8dcf3f48822718179",
+  "operation": "fixed-weight evidence export; no training",
+  "checkpoint_serialization": "PyTorch ZIP entries losslessly DEFLATE-compressed; all tensors verified torch.equal against original export"
+}

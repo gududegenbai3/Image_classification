@@ -1,0 +1,9 @@
+{
+  "candidate_epoch": 3,
+  "candidate_val_top1_percent": 93.3,
+  "selected_epoch": 0,
+  "training_examples": 45000,
+  "official_test_evaluated_for_candidate": false,
+  "tail_parameter_probe_max_abs_change": 0.002939920872449875,
+  "selected_epoch0_tail_probe_change": 0.0
+}

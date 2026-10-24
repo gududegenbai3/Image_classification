@@ -1,0 +1,15 @@
+{"stage": "dataset_identity", "checked": 10000, "matched": 10000}
+{"stage": "dataset_identity", "checked": 20000, "matched": 20000}
+{"stage": "dataset_identity", "checked": 30000, "matched": 30000}
+{"stage": "dataset_identity", "checked": 40000, "matched": 40000}
+{"stage": "dataset_identity", "checked": 50000, "matched": 50000}
+{"stage": "dataset_identity", "checked": 60000, "matched": 60000}
+{"stage": "fixed_weight_evaluation", "run_id": "linear_seed42_20261023", "adapter_reference_max_abs_diff": 0.0}
+{"stage": "export_complete", "run_id": "linear_seed42_20261023", "accuracy": 0.9322, "loss": 0.22771180725097656, "samples": 10000}
+{"stage": "fixed_weight_evaluation", "run_id": "last4_seed42_20261023", "adapter_reference_max_abs_diff": 0.0}
+{"stage": "export_complete", "run_id": "last4_seed42_20261023", "accuracy": 0.9294, "loss": 0.2320456329345703, "samples": 10000}
+{"stage": "fixed_weight_evaluation", "run_id": "partialft_epoch3_val_20261023", "adapter_reference_max_abs_diff": 0.0}
+{"stage": "export_complete", "run_id": "partialft_epoch3_val_20261023", "accuracy": 0.933, "loss": 0.2616679520100355, "samples": 5000}
+{"stage": "fixed_weight_evaluation", "run_id": "partialft_selected0_20261023", "adapter_reference_max_abs_diff": 0.0}
+{"stage": "export_complete", "run_id": "partialft_selected0_20261023", "accuracy": 0.9322, "loss": 0.22771202836036683, "samples": 10000}
+{"export_complete": true, "profiles": 4, "dataset_identity": {"checked_png_images": 60000, "exact_git_blob_matches": 60000, "all_images_byte_identical": true, "first_mismatches": [], "method": "Canonical CIFAR pixels and original filenames encoded with PIL PNG, compared to upstream Git blob SHA1"}}

@@ -1,0 +1,41 @@
+[
+  {
+    "epoch": 0,
+    "val_top1_percent": 93.34,
+    "val_loss": 0.2318124780654907,
+    "stage": "validation_initial"
+  },
+  {
+    "epoch": 1,
+    "val_top1_percent": 92.36,
+    "val_loss": 0.2953238450050354,
+    "train": {
+      "loss": 0.242758074760437,
+      "top1_percent": 92.90222222222222,
+      "seconds": 554.2683215141296,
+      "skipped_optimizer_steps": 0
+    }
+  },
+  {
+    "epoch": 2,
+    "val_top1_percent": 93.24,
+    "val_loss": 0.2744302542567253,
+    "train": {
+      "loss": 0.14878636483285163,
+      "top1_percent": 95.50666666666666,
+      "seconds": 567.7776441574097,
+      "skipped_optimizer_steps": 0
+    }
+  },
+  {
+    "epoch": 3,
+    "val_top1_percent": 93.3,
+    "val_loss": 0.2616679520100355,
+    "train": {
+      "loss": 0.0829637678762277,
+      "top1_percent": 97.43333333333334,
+      "seconds": 567.7494761943817,
+      "skipped_optimizer_steps": 0
+    }
+  }
+]

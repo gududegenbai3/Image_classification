@@ -1,0 +1,11 @@
+{
+  "result_and_log_agree": true,
+  "validation_selected_initial_epoch0": true,
+  "all_three_training_epochs_completed_without_skipped_updates": true,
+  "split_and_input_hashes_match_baseline": true,
+  "source_hash_matches_remote_run": true,
+  "warm_start_head_hash_matches_baseline": true,
+  "both_smoke_tests_passed": true,
+  "actual_epoch3_candidate_exported_but_not_test_evaluated": true,
+  "selected_epoch0_backbone_probe_unchanged": true
+}

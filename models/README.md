@@ -32,3 +32,13 @@
 公共流程将配置中的预训练路径解析为绝对路径后传入模型；配置快照保留仓库相对路径。
 新格式权重包含完整 `model_state_dict`、模型身份、类别映射及配置，公共评估先校验再调用模型加载接口。
 原 `dinov2_linear_probe` 的历史成果保持原路径与内容，不自动迁移或改写。
+
+## DINOv3 ViT-L/16：yjqsh233
+
+`dinov3_vitl16_yjqsh233.py` 实现同一组函数接口。`build_model` 从本地架构配置构建网络；`load_weights` 验证预训练权重 SHA256，加载外部主干及紧凑运行参数；`predict` 返回 FP32 分类头 logits。
+
+`n_last_blocks=1` 拼接最终 CLS 与排除 register tokens 后的 patch 均值；设为 4 时拼接最后四层经过最终 LayerNorm 的 CLS，再拼接末层 patch 均值。`trainable_last_blocks` 控制可训练尾层，冻结部分及 RoPE 坐标增强保持 eval；配置同时决定 CUDA FP16 autocast 和历史 FP16 特征缓存的舍入行为。
+
+请按某次运行的 `results/dinov3_vitl16_yjqsh233/<run_id>/config_snapshot.json` 构建模型，先准备其中固定 revision 的本地预训练文件，再显式加载对应 `final.pt`。分类头、特征统计与实际训练的尾层均在参数文件中，不能只加载分类头来代替微调候选。
+
+提交说明见 [实验记录](../results/dinov3_vitl16_yjqsh233/README.md)。公共 `train` 的优化器及预处理与历史实验不同，基础配置中的历史字段用于记录，不会改变公共训练器的行为。

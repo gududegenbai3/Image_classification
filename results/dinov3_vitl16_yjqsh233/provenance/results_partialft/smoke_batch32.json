@@ -1,0 +1,14 @@
+{
+  "smoke_passed": true,
+  "batch_size": 32,
+  "trainable_parameters": 25399396,
+  "frozen_parameters": 277935104,
+  "frozen_gradients_absent": true,
+  "trainable_gradients_finite": true,
+  "frozen_probe_unchanged": true,
+  "tail_probe_updated": true,
+  "coordinate_augmentation_disabled": true,
+  "training_images_per_second": 92.93404113620878,
+  "peak_allocated_gib": 2.101898670196533,
+  "loss": 2.807490587234497
+}

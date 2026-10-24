@@ -1,0 +1,20 @@
+{
+  "recipe": "dinov3-cifar100-frozen-cls-patchmean-pil224-v1",
+  "weights_sha256": "dcb2e45127cccbf1601e5f42fef165eea275c8e5213197e8dcf3f48822718179",
+  "config_sha256": "135ecd23e34a70b6fbed8b083fdecb319b7e3a54e3d849258bbe4ddcf1783bb5",
+  "processor_sha256": "960c41d1f3a7778b936365769a2d90550b318a6c0a53a0296957adacfe5e0dd7",
+  "script_sha256": "42d26530fdbf80faab787756c8e189ae459992da8814a86b56fc416db5768e1b",
+  "seed": 42,
+  "epochs": 100,
+  "learning_rates": [
+    0.01,
+    0.03,
+    0.1
+  ],
+  "weight_decays": [
+    0.0,
+    0.001
+  ],
+  "feature_cache_dtype": "float16",
+  "classifier_dtype": "float32"
+}

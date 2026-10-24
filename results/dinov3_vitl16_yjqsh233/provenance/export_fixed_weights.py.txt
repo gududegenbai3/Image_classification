@@ -1,0 +1,254 @@
+"""Export fixed DINOv3 artifacts and measured confusion matrices; never train."""
+import os
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+import argparse
+from copy import deepcopy
+import hashlib
+import importlib.util
+import io
+import json
+import pickle
+import sys
+from pathlib import Path
+import numpy as np
+from PIL import Image
+import torch
+from torch.utils.data import DataLoader, Subset
+from torchvision.datasets import CIFAR100
+
+p = argparse.ArgumentParser(description=__doc__)
+p.add_argument("--source", required=True)
+p.add_argument("--stage", required=True)
+p.add_argument("--tree", required=True)
+args = p.parse_args()
+source, stage = Path(args.source), Path(args.stage)
+sys.path.insert(0, str(source))
+import experiment as original
+import experiment_last4 as old_last4
+import experiment_partialft as old_partial
+original.torch, original.np, original.sys = torch, np, sys
+old_last4.torch, old_last4.np, old_last4.sys = torch, np, sys
+
+
+def module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    value = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(value)
+    return value
+
+
+def write(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+
+
+def sha(path):
+    return original.sha256(path)
+
+
+torch.set_num_threads(4)
+torch.use_deterministic_algorithms(True)
+original.seed_all(42)
+key = "dinov3_vitl16_yjqsh233"
+adapter_path = stage / "models" / (key + ".py")
+adapter = module("contribution_adapter", adapter_path)
+metrics_api = module("contribution_metrics", stage / "pipeline/metrics.py")
+base = json.loads((stage / "configs" / (key + ".json")).read_text())
+weights_dir = source / "models/dinov3-vitl16"
+data_dir = source / "data"
+training = CIFAR100(str(data_dir), train=True, download=False)
+testing = CIFAR100(str(data_dir), train=False, download=False)
+mapping = training.class_to_idx
+assert list(mapping) == sorted(mapping) and len(mapping) == 100
+assert mapping == testing.class_to_idx
+
+# Compare all repository PNG blob hashes without downloading or changing images.
+tree = json.loads(Path(args.tree).read_text())
+repo_images = {item["path"]: item["sha"] for item in tree["tree"]
+               if item["type"] == "blob" and item["path"].endswith(".png")
+               and item["path"].startswith(("dataset/train/", "dataset/test/"))}
+matches, checked, mismatches = 0, 0, []
+for split_name, dataset in [("train", training), ("test", testing)]:
+    with (data_dir / "cifar-100-python" / split_name).open("rb") as handle:
+        names = pickle.load(handle, encoding="bytes")[b"filenames"]
+    for index, filename in enumerate(names):
+        filename = filename.decode() if isinstance(filename, bytes) else filename
+        relative = "dataset/" + split_name + "/" + dataset.classes[dataset.targets[index]] + "/" + filename
+        buffer = io.BytesIO()
+        Image.fromarray(dataset.data[index]).save(buffer, format="PNG")
+        png = buffer.getvalue()
+        digest = hashlib.sha1(b"blob " + str(len(png)).encode() + b"\0" + png).hexdigest()
+        matches += int(repo_images.get(relative) == digest)
+        checked += 1
+        if repo_images.get(relative) != digest and len(mismatches) < 10:
+            mismatches.append({"path": relative, "generated_git_blob_sha": digest,
+                               "repository_git_blob_sha": repo_images.get(relative)})
+        if checked % 10000 == 0:
+            print(json.dumps({"stage": "dataset_identity", "checked": checked, "matched": matches}), flush=True)
+assert checked == len(repo_images) == 60000
+dataset_identity = {"checked_png_images": checked, "exact_git_blob_matches": matches,
+                    "all_images_byte_identical": matches == checked, "first_mismatches": mismatches,
+                    "method": "Canonical CIFAR pixels and original filenames encoded with PIL PNG, compared to upstream Git blob SHA1"}
+write(stage / "results" / key / "dataset_identity.json", dataset_identity)
+
+
+def compact_state(old):
+    if "head" in old:
+        return {"head.weight": old["head"]["weight"], "head.bias": old["head"]["bias"],
+                "feature_mean": old["feature_mean"], "feature_std": old["feature_std"]}
+    return old["model"]
+
+
+def score(model, dataset, indices=None, cached=None, batch=64):
+    totals = metrics_api.ClassificationMetrics(100)
+    labels, predictions = [], []
+    model.eval()
+    with torch.inference_mode():
+        if cached is not None:
+            parts = [torch.load(path, weights_only=True, map_location="cpu")
+                     for path in sorted(cached.glob("*.pt"))]
+            x = torch.cat([part["features"] for part in parts]).float().cuda()
+            y = torch.cat([part["labels"] for part in parts]).cuda()
+            x = (x - model.feature_mean) / model.feature_std
+            iterator = ((x[b:b + 2048], y[b:b + 2048]) for b in range(0, len(x), 2048))
+        else:
+            subset = Subset(dataset, indices) if indices is not None else dataset
+            iterator = DataLoader(subset, batch_size=batch, shuffle=False, num_workers=4, pin_memory=True)
+        for inputs, targets in iterator:
+            inputs, targets = inputs.cuda(non_blocking=True), targets.cuda(non_blocking=True)
+            logits = model.head(inputs) if cached is not None else adapter.predict(model, inputs)
+            loss = torch.nn.functional.cross_entropy(logits.float(), targets, reduction="sum")
+            predicted = logits.argmax(1)
+            truth, guessed = targets.tolist(), predicted.tolist()
+            totals.update(truth, guessed, loss.item())
+            labels.extend(truth)
+            predictions.extend(guessed)
+    return totals.compute(), {"targets": labels, "predictions": predictions}
+
+
+original_args = argparse.Namespace(model_dir=str(weights_dir), data_dir=str(data_dir))
+transform = original.processor_transform(original_args)
+train_eval = CIFAR100(str(data_dir), train=True, download=False, transform=transform)
+test_eval = CIFAR100(str(data_dir), train=False, download=False, transform=transform)
+pixels = torch.stack([train_eval[index][0] for index in range(2)]).cuda()
+split = json.loads((source / "runs/vitl16_linear_seed42/split.json").read_text())
+
+profiles = [
+    ("linear_seed42_20261023", "vitl16_linear_seed42", "classifier.pt", "test", 1, 0, "float16_roundtrip"),
+    ("last4_seed42_20261023", "vitl16_last4_linear_seed42", "classifier.pt", "test", 4, 0, "float16_roundtrip"),
+    ("partialft_epoch3_val_20261023", "vitl16_partialft_seed42", "candidate_epoch3.pt", "validation", 1, 2, "none"),
+    ("partialft_selected0_20261023", "vitl16_partialft_seed42", "partial_model.pt", "test", 1, 0, "none"),
+]
+for run_id, old_id, filename, split_name, last_blocks, trainable, quantization in profiles:
+    destination = stage / "results" / key / run_id
+    if destination.exists():
+        raise FileExistsError("Refusing to overwrite exported run " + run_id)
+    old_dir = source / "runs" / old_id
+    cfg = deepcopy(base)
+    cfg["run_id"] = run_id
+    cfg["model"].update(n_last_blocks=last_blocks, trainable_last_blocks=trainable,
+                          freeze_backbone=trainable == 0, feature_quantization=quantization)
+    cfg["data"].update(repository_png_blob_identity_verified=dataset_identity["all_images_byte_identical"],
+                        official_archive_md5="eb9058c3a382ffc7106e4002c42a8d85")
+    old_selection = json.loads((old_dir / "selection.json").read_text())
+    old_result = json.loads((old_dir / "result.json").read_text())
+    if old_id == "vitl16_partialft_seed42":
+        cfg["training"].update(epochs=3 if trainable else 23, batch_size=64 if trainable else 1024,
+                               learning_rate=1e-5 if trainable else 0.01,
+                               weight_decay=0.01 if trainable else 0,
+                               historical_optimizer="AdamW" if trainable else "SGD",
+                               fine_tuning_epochs=3 if trainable else 0,
+                               training_mode="partial_finetuning_candidate" if trainable else "selected_initialization_only",
+                               warm_start_head_epochs=23,
+                               augmentation="RandomCrop32Padding4+HorizontalFlip" if trainable else "none",
+                               fine_tuning_search={"epochs": 3, "backbone_lr": 1e-5, "head_lr": 1e-3,
+                                                   "optimizer": "AdamW", "weight_decay": 0.01,
+                                                   "augmentation": "RandomCrop32Padding4+HorizontalFlip",
+                                                   "warm_start_head": {"optimizer": "SGD", "learning_rate": 0.01,
+                                                                       "weight_decay": 0, "epochs": 23,
+                                                                       "batch_size": 1024}})
+        if trainable:
+            cfg["training"].pop("momentum", None)
+        history = json.loads((old_dir / "history.json").read_text())
+        if trainable:
+            expected = next(row for row in history if row["epoch"] == 3)
+            expected_accuracy, expected_loss = expected["val_top1_percent"] / 100, expected["val_loss"]
+        else:
+            expected_accuracy, expected_loss = old_result["test_top1_percent"] / 100, old_result["test_loss"]
+    else:
+        cfg["training"].update(epochs=old_selection["epoch"], learning_rate=old_selection["lr"],
+                               weight_decay=old_selection["weight_decay"])
+        history = json.loads((old_dir / "validation_history.json").read_text())
+        expected_accuracy, expected_loss = old_result["test_top1_percent"] / 100, old_result["test_loss"]
+    cfg["evaluation"] = {"split": split_name, "batch_size": 2048 if old_id != "vitl16_partialft_seed42" else 64,
+                         "source": "saved_float16_features" if old_id != "vitl16_partialft_seed42" else "PIL_preprocessed_images",
+                         "fixed_weights": True, "gradients_enabled": False}
+    runtime_cfg = deepcopy(cfg)
+    runtime_cfg["model"]["pretrained_dir"] = str(weights_dir)
+    original.seed_all(42)
+    model = adapter.build_model(runtime_cfg)
+    raw = torch.load(old_dir / filename, weights_only=True, map_location="cpu")
+    state = compact_state(raw)
+    if old_id == "vitl16_partialft_seed42" and not trainable:
+        state = {name: value for name, value in state.items() if not name.startswith("backbone.")}
+    checkpoint = stage / "checkpoints" / key / run_id / "final.pt"
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({"checkpoint_format": "dinov3_external_backbone_partial_v1", "model_state_dict": state,
+                "model_key": key, "run_id": run_id, "class_to_idx": mapping, "config": cfg,
+                "pretrained_sha256": cfg["model"]["pretrained_sha256"]}, checkpoint)
+    model = adapter.load_weights(model, checkpoint, device="cuda")
+    with torch.inference_mode():
+        if old_id != "vitl16_partialft_seed42":
+            reference = (old_last4 if last_blocks == 4 else original).extract_batch(model.backbone, pixels.cpu()).half().float()
+            actual = model.features(pixels).cpu()
+            difference = (actual - reference).abs().max().item()
+            torch.testing.assert_close(actual, reference, atol=1e-5, rtol=1e-5)
+        else:
+            reference_model = old_partial.PartialClassifier(original_args)
+            reference_model.load_partial(raw["model"])
+            reference_model.eval()
+            with torch.autocast("cuda", dtype=torch.float16):
+                reference = reference_model(pixels).float()
+            actual = adapter.predict(model, pixels).float()
+            difference = (actual - reference).abs().max().item()
+            torch.testing.assert_close(actual, reference, atol=1e-5, rtol=1e-5)
+            del reference_model
+    print(json.dumps({"stage": "fixed_weight_evaluation", "run_id": run_id,
+                      "adapter_reference_max_abs_diff": difference}), flush=True)
+    cached = old_dir / "features/test" if old_id != "vitl16_partialft_seed42" else None
+    scores, predicted = score(model, train_eval if split_name == "validation" else test_eval,
+                              split["val_indices"] if split_name == "validation" else None, cached=cached)
+    assert abs(scores["accuracy"] - expected_accuracy) < 1e-12
+    assert abs(scores["cross_entropy_loss"] - expected_loss) < 2e-6
+    matrix = scores["confusion_matrix"]
+    assert sum(map(sum, matrix)) == scores["samples"]
+    assert sum(matrix[i][i] for i in range(100)) / scores["samples"] == scores["accuracy"]
+    relative_checkpoint = checkpoint.relative_to(stage).as_posix()
+    scores.update(model_key=key, run_id=run_id, split=split_name, checkpoint=relative_checkpoint,
+                  checkpoint_sha256=sha(checkpoint), fixed_weight_replay=True,
+                  evaluation_path="original_float16_feature_cache" if cached else "deterministic_PIL_images",
+                  original_accuracy=expected_accuracy, original_cross_entropy_loss=expected_loss)
+    write(destination / "metrics.json", scores)
+    write(destination / "predictions.json", predicted)
+    write(destination / "class_to_idx.json", mapping)
+    write(destination / "config_snapshot.json", cfg)
+    write(destination / "history.json", history)
+    write(destination / "split.json", split)
+    write(destination / "environment.json", {
+        "historical_environment": json.loads((old_dir / "environment.json").read_text()),
+        "historical_identity": json.loads((old_dir / "identity.json").read_text()),
+        "model_source_sha256": sha(adapter_path), "source_checkpoint_sha256": sha(old_dir / filename),
+        "exported_checkpoint_sha256": scores["checkpoint_sha256"],
+        "adapter_reference_max_abs_difference_on_two_images": difference,
+        "pretrained_revision": base["model"]["revision"],
+        "pretrained_weights_sha256": base["model"]["pretrained_sha256"],
+        "operation": "fixed-weight evidence export; no training"})
+    write(destination / "status.json", {"state": "complete", "operation": "historical_fixed_weight_evidence_export",
+                                        "selected": not trainable,
+                                        "official_test_evaluation": "not_run" if trainable else "complete",
+                                        "validation_selected_epoch": old_selection["epoch"]})
+    print(json.dumps({"stage": "export_complete", "run_id": run_id, "accuracy": scores["accuracy"],
+                      "loss": scores["cross_entropy_loss"], "samples": scores["samples"]}), flush=True)
+    del model, raw, state
+    torch.cuda.empty_cache()
+print(json.dumps({"export_complete": True, "profiles": len(profiles), "dataset_identity": dataset_identity}), flush=True)

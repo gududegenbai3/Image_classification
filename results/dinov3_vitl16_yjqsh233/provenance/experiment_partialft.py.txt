@@ -1,0 +1,384 @@
+"""CIFAR-100 supervised fine-tuning of the final two DINOv3 blocks."""
+import os
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+import argparse
+import fcntl
+import json
+import math
+import platform
+import subprocess
+import sys
+import time
+from pathlib import Path
+import numpy as np
+import torch
+from torch import nn
+from torch.utils.data import DataLoader, Subset
+from torchvision import transforms as T
+from torchvision.datasets import CIFAR100
+import experiment as baseline
+
+baseline.torch, baseline.np, baseline.sys = torch, np, sys
+
+
+class PartialClassifier(nn.Module):
+    def __init__(self, args):
+        super().__init__()
+        self.backbone = baseline.load_backbone(args)
+        for layer in self.backbone.layer[-2:]:
+            layer.requires_grad_(True)
+        self.head = nn.Linear(2048, 100).cuda()
+        self.register_buffer("feature_mean", torch.zeros(2048, device="cuda"))
+        self.register_buffer("feature_std", torch.ones(2048, device="cuda"))
+        allowed = {"head.weight", "head.bias"}
+        allowed.update("backbone." + name for name, _ in self.backbone.named_parameters()
+                       if name.startswith(("layer.22.", "layer.23.")))
+        actual = {name for name, p in self.named_parameters() if p.requires_grad}
+        assert actual == allowed, "Only blocks 23/24 and the classifier may train"
+
+    def train(self, mode=True):
+        super().train(mode)
+        # Freeze positional coordinate augmentation and all frozen module modes.
+        self.backbone.eval()
+        for layer in self.backbone.layer[-2:]:
+            layer.train(mode)
+        self.head.train(mode)
+        return self
+
+    def forward(self, pixels):
+        hidden = self.backbone(pixel_values=pixels).last_hidden_state
+        patches = hidden[:, 1 + self.backbone.config.num_register_tokens:]
+        features = torch.cat([hidden[:, 0].float(), patches.float().mean(1)], dim=1)
+        with torch.autocast("cuda", enabled=False):
+            return self.head((features - self.feature_mean) / self.feature_std)
+
+    def partial_state(self):
+        names = {name for name, p in self.named_parameters() if p.requires_grad}
+        names.update(["feature_mean", "feature_std"])
+        return {name: value.detach().cpu().clone() for name, value in self.state_dict().items() if name in names}
+
+    def load_partial(self, state):
+        expected = set(self.partial_state())
+        if set(state) != expected:
+            raise RuntimeError("Partial checkpoint keys do not match trainable blocks and normalization")
+        self.load_state_dict(state, strict=False)
+
+
+def loader(args, indices, training, epoch=0, refit=False):
+    transform = baseline.processor_transform(args)
+    if training:
+        transform = T.Compose([T.RandomCrop(32, padding=4), T.RandomHorizontalFlip(), *transform.transforms])
+    dataset = CIFAR100(args.data_dir, train=True, download=False, transform=transform)
+    dataset = Subset(dataset, indices)
+    generator = torch.Generator().manual_seed(args.seed + epoch + (10000 if refit else 0))
+    return DataLoader(dataset, batch_size=args.batch_size if training else args.eval_batch_size,
+                      shuffle=training, num_workers=args.workers, pin_memory=True,
+                      generator=generator, drop_last=False)
+
+
+@torch.no_grad()
+def evaluate(model, data):
+    model.eval()
+    correct, count, loss_sum = 0, 0, 0.0
+    for pixels, targets in data:
+        pixels, targets = pixels.cuda(non_blocking=True), targets.cuda(non_blocking=True)
+        with torch.autocast("cuda", dtype=torch.float16):
+            logits = model(pixels)
+        loss = nn.functional.cross_entropy(logits.float(), targets, reduction="sum")
+        if not torch.isfinite(loss):
+            raise RuntimeError("Non-finite evaluation loss")
+        correct += (logits.argmax(1) == targets).sum().item()
+        count += len(targets)
+        loss_sum += loss.item()
+    return {"top1_percent": 100 * correct / count, "correct": correct,
+            "examples": count, "loss": loss_sum / count}
+
+
+def optimizer_for(model, args):
+    blocks = [p for p in model.backbone.parameters() if p.requires_grad]
+    return torch.optim.AdamW([
+        {"params": blocks, "lr": args.backbone_lr, "base_lr": args.backbone_lr},
+        {"params": model.head.parameters(), "lr": args.head_lr, "base_lr": args.head_lr},
+    ], weight_decay=args.weight_decay)
+
+
+def save_checkpoint(path, model, optimizer, scaler, epoch, identity):
+    value = {"model": model.partial_state(), "optimizer": optimizer.state_dict(),
+             "scaler": scaler.state_dict(), "epoch": epoch, "identity": identity}
+    temp = path.with_suffix(".tmp")
+    torch.save(value, temp)
+    temp.replace(path)
+
+
+def train_epoch(model, data, optimizer, scaler, epoch, args, phase):
+    model.train()
+    optimizer.zero_grad(set_to_none=True)
+    updates_per_epoch = math.ceil(len(data) / args.accumulation)
+    total_updates = args.epochs * updates_per_epoch
+    warmup = max(1, int(total_updates * 0.05))
+    started = time.time()
+    loss_sum, correct, examples, skipped = 0.0, 0, 0, 0
+    for index, (pixels, targets) in enumerate(data):
+        group = index // args.accumulation
+        update = (epoch - 1) * updates_per_epoch + group
+        if update < warmup:
+            multiplier = 0.1 + 0.9 * (update + 1) / warmup
+        else:
+            progress = (update - warmup) / max(1, total_updates - warmup - 1)
+            multiplier = 0.05 + 0.95 * 0.5 * (1 + math.cos(math.pi * progress))
+        for param_group in optimizer.param_groups:
+            param_group["lr"] = param_group["base_lr"] * multiplier
+        pixels, targets = pixels.cuda(non_blocking=True), targets.cuda(non_blocking=True)
+        group_examples = min(args.batch_size * args.accumulation,
+                             len(data.dataset) - group * args.batch_size * args.accumulation)
+        with torch.autocast("cuda", dtype=torch.float16):
+            logits = model(pixels)
+        loss = nn.functional.cross_entropy(logits.float(), targets, reduction="sum")
+        if not torch.isfinite(loss):
+            raise RuntimeError("Non-finite training loss")
+        scaler.scale(loss / group_examples).backward()
+        if (index + 1) % args.accumulation == 0 or index + 1 == len(data):
+            scaler.unscale_(optimizer)
+            nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
+            before = scaler.get_scale()
+            scaler.step(optimizer)
+            scaler.update()
+            skipped += int(scaler.get_scale() < before)
+            optimizer.zero_grad(set_to_none=True)
+        loss_sum += loss.item()
+        correct += (logits.argmax(1) == targets).sum().item()
+        examples += len(targets)
+        if index == 0 or (index + 1) % 100 == 0 or index + 1 == len(data):
+            print(json.dumps({"stage": phase, "epoch": epoch, "batch": index + 1,
+                              "batches": len(data), "examples": examples,
+                              "loss": loss_sum / examples, "train_top1_percent": 100 * correct / examples,
+                              "skipped_optimizer_steps": skipped,
+                              "elapsed_seconds": round(time.time() - started, 1)}), flush=True)
+    return {"loss": loss_sum / examples, "top1_percent": 100 * correct / examples,
+            "seconds": time.time() - started, "skipped_optimizer_steps": skipped}
+
+
+def warm_start(model, args, train_ids, final=False):
+    source = Path(args.baseline_run)
+    selection = json.loads((source / "selection.json").read_text())
+    if final:
+        initial = torch.load(source / "classifier.pt", weights_only=True, map_location="cpu")
+        model.head.load_state_dict(initial["head"])
+        model.feature_mean.copy_(initial["feature_mean"])
+        model.feature_std.copy_(initial["feature_std"])
+        return
+    # Validation selection must never initialize from the head fitted on all 50k images.
+    parts = [torch.load(path, weights_only=True, map_location="cpu")
+             for path in sorted((source / "features" / "train").glob("*.pt"))]
+    x = torch.cat([part["features"] for part in parts]).float().cuda()
+    y = torch.cat([part["labels"] for part in parts]).cuda()
+    assert x.shape == (50000, 2048)
+    x, y = x[train_ids], y[train_ids]
+    mean, std = x.mean(0), x.std(0, unbiased=False).clamp_min(1e-6)
+    head, _, _ = baseline.fit_head((x - mean) / std, y, args, selection["lr"],
+                                  selection["weight_decay"], selection["epoch"])
+    model.head.load_state_dict(head.state_dict())
+    model.feature_mean.copy_(mean)
+    model.feature_std.copy_(std)
+
+
+def smoke(args):
+    baseline.seed_all(args.seed)
+    model = PartialClassifier(args)
+    data = loader(args, list(range(args.batch_size)), training=True)
+    pixels, targets = next(iter(data))
+    pixels, targets = pixels.cuda(), targets.cuda()
+    optimizer = optimizer_for(model, args)
+    scaler = torch.amp.GradScaler("cuda", init_scale=1024)
+    model.train()
+    assert not model.backbone.rope_embeddings.training
+    frozen = [(name, p) for name, p in model.named_parameters() if not p.requires_grad]
+    trainable = [(name, p) for name, p in model.named_parameters() if p.requires_grad]
+    frozen_probe = frozen[0][1].detach().clone()
+    updated_probe = model.backbone.layer[-1].attention.q_proj.weight.detach().clone()
+    times = []
+    torch.cuda.reset_peak_memory_stats()
+    for step in range(4):
+        optimizer.zero_grad(set_to_none=True)
+        torch.cuda.synchronize()
+        started = time.perf_counter()
+        with torch.autocast("cuda", dtype=torch.float16):
+            logits = model(pixels)
+        loss = nn.functional.cross_entropy(logits.float(), targets)
+        assert torch.isfinite(loss)
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
+        assert all(p.grad is None for _, p in frozen)
+        assert all(p.grad is not None and torch.isfinite(p.grad).all() for _, p in trainable)
+        nn.utils.clip_grad_norm_([p for _, p in trainable], 1.0)
+        scaler.step(optimizer)
+        scaler.update()
+        torch.cuda.synchronize()
+        times.append(time.perf_counter() - started)
+    assert torch.equal(frozen_probe, frozen[0][1])
+    assert not torch.equal(updated_probe, model.backbone.layer[-1].attention.q_proj.weight)
+    result = {"smoke_passed": True, "batch_size": args.batch_size,
+              "trainable_parameters": sum(p.numel() for _, p in trainable),
+              "frozen_parameters": sum(p.numel() for _, p in frozen),
+              "frozen_gradients_absent": True, "trainable_gradients_finite": True,
+              "frozen_probe_unchanged": True, "tail_probe_updated": True,
+              "coordinate_augmentation_disabled": True,
+              "training_images_per_second": args.batch_size / (sum(times[1:]) / len(times[1:])),
+              "peak_allocated_gib": torch.cuda.max_memory_allocated() / 1024**3,
+              "loss": loss.item()}
+    baseline.write_json(Path(args.run_dir) / f"smoke_batch{args.batch_size}.json", result)
+    print(json.dumps(result), flush=True)
+
+
+def run(args):
+    root = Path(args.run_dir)
+    original = json.loads((Path(args.baseline_run) / "identity.json").read_text())
+    identity = {"recipe": "dinov3-cifar100-last2blocks-supervised-aug224-v1",
+                "script_sha256": baseline.sha256(Path(__file__)),
+                "weights_sha256": baseline.sha256(Path(args.model_dir) / "model.safetensors"),
+                "config_sha256": baseline.sha256(Path(args.model_dir) / "config.json"),
+                "processor_sha256": baseline.sha256(Path(args.model_dir) / "preprocessor_config.json"),
+                "seed": args.seed, "schedule_epochs": args.epochs,
+                "microbatch": args.batch_size, "accumulation": args.accumulation,
+                "backbone_lr": args.backbone_lr, "head_lr": args.head_lr,
+                "weight_decay": args.weight_decay,
+                "optimizer": "AdamW", "gradient_clip_norm": 1.0,
+                "precision": "FP16 backbone autocast; FP32 classifier and parameters; GradScaler",
+                "training_augmentation": "RandomCrop32Padding4+HorizontalFlip+Resize224",
+                "warm_start": "validation head refitted on 45k only; final head on all 50k",
+                "trainable_blocks_zero_based": [22, 23], "final_layernorm_frozen": True,
+                "baseline_classifier_sha256": baseline.sha256(Path(args.baseline_run) / "classifier.pt")}
+    for key in ["weights_sha256", "config_sha256", "processor_sha256"]:
+        assert identity[key] == original[key], "Backbone or processor changed from baseline"
+    if (root / "identity.json").exists() and json.loads((root / "identity.json").read_text()) != identity:
+        raise RuntimeError("Run identity changed; use a new experiment directory")
+    baseline.write_json(root / "identity.json", identity)
+    if (root / "result.json").exists():
+        print((root / "result.json").read_text(), flush=True)
+        return
+    import transformers, torchvision
+    baseline.write_json(root / "environment.json", {
+        "python": platform.python_version(), "torch": torch.__version__,
+        "torchvision": torchvision.__version__, "transformers": transformers.__version__,
+        "numpy": np.__version__, "cuda_runtime": torch.version.cuda,
+        "gpu": torch.cuda.get_device_name(0), "arguments": vars(args)})
+    with open(root / "packages.txt", "w", encoding="utf-8") as handle:
+        subprocess.run([sys.executable, "-m", "pip", "freeze"], stdout=handle, check=True)
+    labels = np.array(CIFAR100(args.data_dir, train=True, download=False).targets)
+    train_ids, val_ids = baseline.split_indices(labels, args.seed)
+    split = {"train_indices": train_ids.tolist(), "val_indices": val_ids.tolist()}
+    assert split == json.loads((Path(args.baseline_run) / "split.json").read_text())
+    baseline.write_json(root / "split.json", split)
+    history_path, selected_path = root / "history.json", root / "selection.json"
+    history = json.loads(history_path.read_text()) if history_path.exists() else []
+    best = json.loads(selected_path.read_text()) if selected_path.exists() else None
+    if not (root / "selection_complete.json").exists():
+        baseline.seed_all(args.seed)
+        model = PartialClassifier(args)
+        optimizer = optimizer_for(model, args)
+        scaler = torch.amp.GradScaler("cuda", init_scale=1024)
+        start_epoch = 1
+        latest = root / "selection_latest.pt"
+        if latest.exists():
+            saved = torch.load(latest, map_location="cuda", weights_only=False)
+            assert saved["identity"] == identity
+            model.load_partial(saved["model"])
+            optimizer.load_state_dict(saved["optimizer"])
+            scaler.load_state_dict(saved["scaler"])
+            start_epoch = saved["epoch"] + 1
+        else:
+            warm_start(model, args, train_ids)
+            initial = evaluate(model, loader(args, val_ids, training=False))
+            best = {"epoch": 0, "val_top1_percent": initial["top1_percent"], "val_loss": initial["loss"]}
+            history = [{**best, "stage": "validation_initial"}]
+            baseline.write_json(history_path, history)
+            baseline.write_json(selected_path, best)
+            print(json.dumps({"stage": "validation_initial", **best}), flush=True)
+        for epoch in range(start_epoch, args.epochs + 1):
+            train_stats = train_epoch(model, loader(args, train_ids, training=True, epoch=epoch),
+                                      optimizer, scaler, epoch, args, "selection_train")
+            val = evaluate(model, loader(args, val_ids, training=False))
+            row = {"epoch": epoch, "val_top1_percent": val["top1_percent"], "val_loss": val["loss"],
+                   "train": train_stats}
+            if (row["val_top1_percent"], -row["val_loss"]) > (best["val_top1_percent"], -best["val_loss"]):
+                best = {"epoch": epoch, "val_top1_percent": row["val_top1_percent"], "val_loss": row["val_loss"]}
+            history = [entry for entry in history if entry["epoch"] < epoch] + [row]
+            baseline.write_json(history_path, history)
+            baseline.write_json(selected_path, best)
+            save_checkpoint(latest, model, optimizer, scaler, epoch, identity)
+            print(json.dumps({"stage": "validation", **row, "best": best}), flush=True)
+        baseline.write_json(root / "selection_complete.json", best)
+        del optimizer, scaler, model
+        torch.cuda.empty_cache()
+    best = json.loads(selected_path.read_text())
+    # Restart from the original pretrained backbone; never carry validation-stage weights into refit.
+    baseline.seed_all(args.seed)
+    model = PartialClassifier(args)
+    optimizer = optimizer_for(model, args)
+    scaler = torch.amp.GradScaler("cuda", init_scale=1024)
+    latest = root / "refit_latest.pt"
+    start_epoch = 1
+    if latest.exists():
+        saved = torch.load(latest, map_location="cuda", weights_only=False)
+        assert saved["identity"] == identity
+        model.load_partial(saved["model"])
+        optimizer.load_state_dict(saved["optimizer"])
+        scaler.load_state_dict(saved["scaler"])
+        start_epoch = saved["epoch"] + 1
+    else:
+        warm_start(model, args, train_ids, final=True)
+    for epoch in range(start_epoch, best["epoch"] + 1):
+        stats = train_epoch(model, loader(args, list(range(50000)), training=True, epoch=epoch, refit=True),
+                            optimizer, scaler, epoch, args, "refit_train")
+        save_checkpoint(latest, model, optimizer, scaler, epoch, identity)
+        print(json.dumps({"stage": "refit_epoch_complete", "epoch": epoch, **stats}), flush=True)
+    torch.save({"model": model.partial_state(), "selection": best, "identity": identity}, root / "partial_model.pt")
+    # Official test data is first opened after all choices and the full-data refit are complete.
+    test_data = CIFAR100(args.data_dir, train=False, download=False, transform=baseline.processor_transform(args))
+    test_loader = DataLoader(test_data, batch_size=args.eval_batch_size,
+                             num_workers=args.workers, pin_memory=True)
+    test = evaluate(model, test_loader)
+    result = {"test_top1_percent": test["top1_percent"], "test_loss": test["loss"],
+              "test_examples": test["examples"], "correct": test["correct"],
+              "refit_train_examples": 50000, "selection": best, "seed": args.seed,
+              "protocol": identity["recipe"], "backbone_lr": args.backbone_lr,
+              "head_lr": args.head_lr, "refit_epochs": best["epoch"]}
+    baseline.write_json(root / "result.json", result)
+    print(json.dumps(result), flush=True)
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--mode", choices=["smoke", "run"], default="smoke")
+    p.add_argument("--model-dir", default="models/dinov3-vitl16")
+    p.add_argument("--data-dir", default="data")
+    p.add_argument("--baseline-run", default="runs/vitl16_linear_seed42")
+    p.add_argument("--run-dir", default="runs/vitl16_partialft_seed42")
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--epochs", type=int, default=3)
+    p.add_argument("--batch-size", type=int, default=32)
+    p.add_argument("--eval-batch-size", type=int, default=64)
+    p.add_argument("--accumulation", type=int, default=2)
+    p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--backbone-lr", type=float, default=1e-5)
+    p.add_argument("--head-lr", type=float, default=1e-3)
+    p.add_argument("--weight-decay", type=float, default=0.01)
+    args = p.parse_args()
+    if args.epochs < 1 or args.batch_size < 1 or args.accumulation < 1:
+        p.error("Epochs, batch size and accumulation must be positive")
+    Path(args.run_dir).mkdir(parents=True, exist_ok=True)
+    lock = open(Path(args.run_dir) / "process.lock", "a")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        raise RuntimeError("Another process is using this experiment directory")
+    torch.set_num_threads(4)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True)
+    baseline.seed_all(args.seed)
+    (smoke if args.mode == "smoke" else run)(args)
+
+
+if __name__ == "__main__":
+    main()
