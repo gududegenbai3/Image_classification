@@ -2,7 +2,7 @@
 
 ## 大纲与适用范围
 
-本文适用于整个仓库。内容依次为：项目定位与位置、所有者专属规则、项目结构、AI 问题定位、接口与交付约定、协作流程。
+本文适用于整个仓库。内容依次为：项目定位与位置、所有者专属规则、项目结构、AI 问题定位、接口与交付约定、协作流程、已训练模型与成果。
 根目录统一使用 `AGENTS.md`，不创建 `Agents.md` 或 `Agnets.md` 等重复入口。
 
 ## 项目定位与位置
@@ -12,6 +12,7 @@
 - 数据：现有 CIFAR-100，100 类，训练集 50,000 张、测试集 10,000 张。
 - 增强数据：根目录 `dataset_mirror/train/<类别>/<原文件名>.png` 保存原训练集的水平镜像，共 100 类、50,000 张；仅保存派生图片，不保留生成脚本。当前目录比原生成位置增加了 `train/` 层级；没有镜像测试集，测试集仍为 `dataset/test/`。
 - 已有基线：冻结 DINOv2-Small 主干，训练线性分类头；历史成果保留原路径。
+- 已训练模型与成果：与 README 同名章节一致，按 DINOv2-Small、ConvNeXt V2、DINOv3（yjqsh233）、DINOv3 + MLP（JackChen070421）的顺序组织；模型状态及审计约定见本文末尾对应小节。
 - DINOv3 提交：`dinov3_vitl16_yjqsh233` 保存两种冻结特征方案及最后两层微调的候选/保留方案，详见根目录 README 和对应结果目录说明。
 - 两个核心域指职责域及其目录，不是两个单独文件：数据域负责数据；模型域负责模型代码、配置、参数及评分。
 
@@ -104,19 +105,11 @@
 ```
 <!-- PROJECT_STRUCTURE_END -->
 
+目录树按 Git 项目文件生成，不列出被忽略的缓存。ConvNeXt 临时工作目录、下载包解压目录及迁移辅助备份已清理，正式入口保留 `pipeline/convnext.py`。清理时仅删除已核对的重复辅助备份及可再生字节码、系统元数据；不得将 `results/` 中用于哈希审计的 `provenance/`、正式配置或权重视为多余文件删除。
+
 数据域由 `dataset/` 与 `dataset_mirror/` 组成，镜像训练图片的读取根目录为 `dataset_mirror/train/`，不是 `dataset_mirror/`。模型域由 `models/`、`configs/`、`checkpoints/`、`results/` 共同组成。`pipeline/` 是连接两个域的公共流程；`tools/`、`.githooks/`、`.github/`、`tests/` 提供文档同步和验证。保留现有平级目录，避免破坏已有成果引用。
 
 逐文件职责见 `README.md` 的“各文件的作用”章节；运行依赖由根目录 `requirements.txt` 声明，修改直接使用的第三方依赖时同步维护该清单。
-
-ConvNeXt V2 原临时目录 `convenext/` 已完成职责归位：模型单文件为 `models/convnextv2_base_gududegenbai3.py`，训练配置为 `configs/convnextv2_base_gududegenbai3.json`，缓存特征编排为 `pipeline/convnext.py`，入口为 `python -m pipeline.convnext`（validate/prepare/train）。环境检查为 `tools/check_convnext_environment.py`，环境目标配置为 `configs/convnextv2_base_environment.json`，直接依赖统一由根目录 `requirements.txt` 声明。不再使用或重新创建临时目录。
-
-云端使用 AutoDL 镜像自带 Python 3.12，不创建或激活额外环境。RTX PRO 6000 Blackwell 使用支持其架构的 CUDA 构建；已完成运行使用 PyTorch 2.8.0+cu128、torchvision 0.23.0+cu128、timm 1.0.22。prepare 显式下载并固定 Hugging Face commit SHA 与文件 SHA256，缓存位置继续为 `.cache/<model_key>/`；train 只读取本地已准备权重。目录迁移不改变既有缓存布局。
-
-ConvNeXt 流程缓存原图/镜像的固定特征，按原图身份分层划分：45,000 原图及对应镜像共 90,000 张用于选择训练，5,000 原图用于验证，其镜像不参与选择训练。验证选定轮数后重新初始化头，在全部 100,000 张特征上拟合，再重新加载保存的分类头，对原始 10,000 张测试图评分一次。不得把镜像与原图随机拆分到两侧。只缓存特征，不改动真实图片或物理划分。失败运行保留状态，重试使用新 run_id，不自动覆盖或续训。当前没有关闭镜像的配置或命令参数，无镜像对照尚未实现或运行。
-
-此配置格式供 `python -m pipeline.convnext` 使用，不直接传入通用 `python -m pipeline`。权重只保存分类头及模型身份/配置/类别映射，依赖固定外部主干。输出遵守根目录 checkpoints/results 命名；快照记录解析后的版本及预处理。特征缓存位于 `.cache/features/<model_key>/<run_id>/`，不提交 Git。
-
-已从用户下载包归档真实运行 `convnext_20261025_143320`：模型与结果分别移入 `checkpoints/convnextv2_base_gududegenbai3/` 和 `results/convnextv2_base_gududegenbai3/`，保留原 run_id 及全部原始文件字节。验证选择 5 轮，原始 test 10,000 张 accuracy 为 0.8844、平均交叉熵为 0.38219886627197264。`provenance/` 保存原源码文本、基础配置、预训练来源及逐文件迁移哈希；不得为了反映新入口而回写历史快照、环境哈希或评分。说明见 `results/convnextv2_base_gududegenbai3/README.md`；真实证据由 `tests/test_convnext_evidence.py` 校验。此次整理未重新执行真实训练或评估。
 
 ## AI 面对问题时的位置与处理方式
 
@@ -125,12 +118,12 @@ ConvNeXt 流程缓存原图/镜像的固定特征，按原图身份分层划分�
 - 超参数、预训练版本、冻结策略、设备与随机种子问题：在 `configs/` 定位；运行时通过函数参数传入。
 - 参数加载、恢复训练问题：在对应 `checkpoints/<model_key>/<run_id>/` 定位，核对模型配置和类别映射。
 - accuracy、交叉熵损失、混淆矩阵或模型对比问题：在对应 `results/<model_key>/<run_id>/` 定位，先核对数据划分、样本数和指标定义。
-- 结构、入口与协作约定问题：读取本文件及 `README.md`；只维护非保护区。
+- 结构、入口与协作约定问题：读取本文件及 `README.md`；只维护非保护区。模型实验统一查阅 README 的“已训练模型与成果”及本文件对应小节，不将章节移动或合并视为模型文件、入口或实验结果被删除。
 - 缺少 GitHub 用户名时：可先完成公共说明与接口工作；提交个人模型前向提交者确认，禁止从本地用户名推断身份。
 
 ## 接口分离与 function calling 约定
 
-公共入口为 `python -m pipeline`，通过 `pipeline/model_api.py` 调用下列函数；这里的 function calling 指程序通过明确参数调用函数。
+通用入口为 `python -m pipeline`，通过 `pipeline/model_api.py` 调用下列函数；ConvNeXt 使用 `python -m pipeline.convnext` 编排并调用相同模型函数接口。这里的 function calling 指程序通过明确参数调用函数。
 
 ```python
 build_model(config) -> model
@@ -172,7 +165,7 @@ results/<model_key>/<run_id>/history.json
 3. 根据改动进行必要验证；结构变化时同步两份根目录文档的可维护内容，再检查路径与说明一致。
 4. 交付时说明改动、验证情况与尚未实现的部分，不将接口约定描述成可运行功能。
 
-当前已接入 `models/dinov2_small_gududegenbai3.py`、`models/dinov3_vitl16_JackChen070421.py`、`models/dinov3_vitl16_yjqsh233.py` 与同名 JSON 配置。统一命令：
+当前已接入 DINOv2-Small、ConvNeXt V2 及两位贡献者的 DINOv3 模型，均在 `models/` 提供独立代码文件，并使用 `configs/` 下同名 JSON 配置。DINO 系列使用以下通用命令；ConvNeXt 的独立编排命令见本文“ConvNeXt V2：gududegenbai3”小节：
 
 ```sh
 python -m pipeline validate --config configs/dinov2_small_gududegenbai3.json
@@ -194,18 +187,27 @@ python -m pipeline evaluate --config configs/dinov3_vitl16_JackChen070421.json -
 `.githooks/pre-commit` 自动同步暂存结构，若文档出现未暂存变更则阻止提交，要求先检查并暂存；新克隆需执行 `git config core.hooksPath .githooks`。CI 校验目录树、测试与语法。
 同步器只修改 `PROJECT_STRUCTURE` 标记内的内容，并核对所有者专属区原文不变。
 
-## DINOv3 历史实验提交
+## 已训练模型与成果
 
-贡献者已确认 GitHub 用户名为 `yjqsh233`。模型、基础配置、参数和评分均使用 `dinov3_vitl16_yjqsh233`；四个独立运行目录对应三组实验，禁止将微调第 3 轮的验证集评分写成测试集评分。
+本节与 README 的“已训练模型与成果”保持模型顺序和状态一致。README 集中展示实验说明，AI 在此核对入口、产物和证据边界；逐次实验以对应 results/ 下的原始记录为准。章节重新组织不改变已有代码、模型身份或运行目录。
 
-- 模型适配器仅在显式 `load_weights` 时加载参数。紧凑 `final.pt` 依赖配置指定版本及 SHA256 的 Meta 预训练主干；冻结方案只含分类头与特征归一化统计，微调候选另含最后两层参数。
-- `results/dinov3_vitl16_yjqsh233/README.md` 解释选择、重拟合、预处理及历史复评过程；`dataset_identity.json` 记录全部 60,000 张 PNG 与原实验图片的字节核对。
-- 每次运行提供固定权重评分、逐样本预测、原始整数混淆矩阵、配置、类别映射、训练历史、划分、环境与状态。`provenance/` 保留原实验源码文本及其哈希，供审计；模型加载仍只有 `models/` 下的单文件入口。
-- 公共流程使用 HF 预处理和 AdamW，历史实验使用 PIL resize、缓存特征 SGD 或分组 AdamW；不要把公共 `train` 命令称为历史训练的精确复现。历史评分的评估路径以每个 `metrics.json` 为准。
-- `tests/test_dinov3_submission.py` 检查微型模型接口；`tests/test_dinov3_evidence.py` 核对真实评分、混淆矩阵、逐样本预测及参数哈希。DINOv3 许可位于 `checkpoints/dinov3_vitl16_yjqsh233/LICENSE.md`。
+### DINOv2-Small + 线性分类头
 
+冻结 Meta DINOv2-Small 主干，仅训练 `Linear(384, 100)`，原始 50,000 张训练图训练 10 轮。原始 test 10,000 张 Top-1 为 84.96%、Top-5 为 97.34%、平均交叉熵约 0.5173；最后一轮训练准确率 93.316% 不能作为测试分数。
 
-## ConvNeXt 归档后的操作入口
+历史分类头为 `checkpoints/dinov2_linear_probe/formal/run01/final.pt`，配置、训练记录和评分为 `results/dinov2_linear_probe/formal/run01/`。历史字段 `top1_accuracy`、`loss` 及原路径保持不变，不为命名统一回写成果，也不从本地用户名推断历史贡献者身份。预测仍需同版本官方主干；历史参数封装不保证兼容新公共入口。
+
+### ConvNeXt V2：gududegenbai3
+
+ConvNeXt V2 原临时目录 `convenext/` 已完成职责归位：模型单文件为 `models/convnextv2_base_gududegenbai3.py`，训练配置为 `configs/convnextv2_base_gududegenbai3.json`，缓存特征编排为 `pipeline/convnext.py`，入口为 `python -m pipeline.convnext`（validate/prepare/train）。环境检查为 `tools/check_convnext_environment.py`，环境目标配置为 `configs/convnextv2_base_environment.json`，直接依赖统一由根目录 `requirements.txt` 声明。不再使用或重新创建临时目录。
+
+云端使用 AutoDL 镜像自带 Python 3.12，不创建或激活额外环境。RTX PRO 6000 Blackwell 使用支持其架构的 CUDA 构建；已完成运行使用 PyTorch 2.8.0+cu128、torchvision 0.23.0+cu128、timm 1.0.22。prepare 显式下载并固定 Hugging Face commit SHA 与文件 SHA256，缓存位置继续为 `.cache/<model_key>/`；train 只读取本地已准备权重。目录迁移不改变既有缓存布局。
+
+ConvNeXt 流程缓存原图/镜像的固定特征，按原图身份分层划分：45,000 原图及对应镜像共 90,000 张用于选择训练，5,000 原图用于验证，其镜像不参与选择训练。验证选定轮数后重新初始化头，在全部 100,000 张特征上拟合，再重新加载保存的分类头，对原始 10,000 张测试图评分一次。不得把镜像与原图随机拆分到两侧。只缓存特征，不改动真实图片或物理划分。失败运行保留状态，重试使用新 run_id，不自动覆盖或续训。当前没有关闭镜像的配置或命令参数，无镜像对照尚未实现或运行。
+
+此配置格式供 `python -m pipeline.convnext` 使用，不直接传入通用 `python -m pipeline`。权重只保存分类头及模型身份/配置/类别映射，依赖固定外部主干。输出遵守根目录 checkpoints/results 命名；快照记录解析后的版本及预处理。特征缓存位于 `.cache/features/<model_key>/<run_id>/`，不提交 Git。
+
+已从用户下载包归档真实运行 `convnext_20261025_143320`：模型与结果分别移入 `checkpoints/convnextv2_base_gududegenbai3/` 和 `results/convnextv2_base_gududegenbai3/`，保留原 run_id 及全部原始文件字节。验证选择 5 轮，原始 test 10,000 张 accuracy 为 0.8844、平均交叉熵为 0.38219886627197264。`provenance/` 保存原源码文本、基础配置、预训练来源及逐文件迁移哈希；不得为了反映新入口而回写历史快照、环境哈希或评分。说明见 `results/convnextv2_base_gududegenbai3/README.md`；真实证据由 `tests/test_convnext_evidence.py` 校验。此次整理未重新执行真实训练或评估。
 
 从项目根目录运行：
 
@@ -217,3 +219,24 @@ python -m pipeline.convnext train --run-id mirror_run02
 ```
 
 `pipeline/convnext.py` 负责模型之外的数据检查、特征提取、训练调度、指标和运行记录；模型结构及参数加载仍通过模型单文件函数调用。`python -m pipeline` 的 DINO 接口和原有配置保持兼容，不将 ConvNeXt 配置误传给该通用入口。
+
+### DINOv3 ViT-L/16：yjqsh233
+
+贡献者已确认 GitHub 用户名为 `yjqsh233`。模型、基础配置、参数和评分均使用 `dinov3_vitl16_yjqsh233`；四个独立运行目录对应三组实验，禁止将微调第 3 轮的验证集评分写成测试集评分。
+
+- 模型适配器仅在显式 `load_weights` 时加载参数。紧凑 `final.pt` 依赖配置指定版本及 SHA256 的 Meta 预训练主干；冻结方案只含分类头与特征归一化统计，微调候选另含最后两层参数。
+- `results/dinov3_vitl16_yjqsh233/README.md` 解释选择、重拟合、预处理及历史复评过程；`dataset_identity.json` 记录全部 60,000 张 PNG 与原实验图片的字节核对。
+- 每次运行提供固定权重评分、逐样本预测、原始整数混淆矩阵、配置、类别映射、训练历史、划分、环境与状态。`provenance/` 保留原实验源码文本及其哈希，供审计；模型加载仍只有 `models/` 下的单文件入口。
+- 公共流程使用 HF 预处理和 AdamW，历史实验使用 PIL resize、缓存特征 SGD 或分组 AdamW；不要把公共 `train` 命令称为历史训练的精确复现。历史评分的评估路径以每个 `metrics.json` 为准。
+- `tests/test_dinov3_submission.py` 检查微型模型接口；`tests/test_dinov3_evidence.py` 核对真实评分、混淆矩阵、逐样本预测及参数哈希。DINOv3 许可位于 `checkpoints/dinov3_vitl16_yjqsh233/LICENSE.md`。
+
+### DINOv3 ViT-L/16 + MLP 分类头（JackChen070421）
+
+README 将该模型分为 v1 无增强和 v2 水平镜像两组实验。模型为 `models/dinov3_vitl16_JackChen070421.py`，配置为 `configs/dinov3_vitl16_JackChen070421.json`，冻结主干使用固定 revision，分类头采用 `2048 → 512 → 100` MLP。运行权重仅保存分类头，推理仍依赖同版本外部主干。
+
+- v1：参数为 `checkpoints/dinov3_vitl16_JackChen070421/run01/final.pt`，公共复评为 `results/dinov3_vitl16_JackChen070421/eval01/`，测试 Top-1 为 93.24%，平均交叉熵约 0.3465。
+- v2：参数为 `checkpoints/dinov3_vitl16_JackChen070421/run02_aug/final.pt`，公共复评为 `results/dinov3_vitl16_JackChen070421/eval02_aug/`，测试 Top-1 为 93.53%，平均交叉熵约 0.3936。
+
+公共评分使用原始 test 10,000 张、单次前向且无 TTA；README 中本地 TTA 分数单独说明，不替换公共评分。v2 的原图与镜像可能跨训练/验证两侧，验证准确率 99.27% 存在同图泄漏，不能作为无泄漏验证结果；不回写历史划分或指标，也不把该划分用于新的增强实验。
+
+历史快照可能记录整理前的镜像路径，当前读取根目录为 `dataset_mirror/train`。通用入口不会解释历史 `data.augmentation` 字段或自动合并两组数据。复评必须使用新 run_id，已有 eval01、eval02_aug 目录保持原样。
