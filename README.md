@@ -89,26 +89,11 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 ```
 <!-- PROJECT_STRUCTURE_END -->
 
+目录树列出纳入版本管理的项目文件。ConvNeXt 的原临时工作目录、下载包解压目录及迁移辅助备份已清理；当前训练入口为 `pipeline/convnext.py`。`results/` 中的 `provenance/` 保留原训练源码文本及来源记录，用于核对历史实验，不作为临时文件删除。
+
 模型域保留现有平级目录，不搬动历史权重和结果。模型接入详见 [models/README.md](models/README.md)。
 
 数据域由 `dataset/` 与 `dataset_mirror/` 组成：原始训练图片位于 `dataset/train/<类别>/`，镜像训练图片位于 `dataset_mirror/train/<类别>/`，原始测试图片位于 `dataset/test/<类别>/`。镜像目录新增了 `train/` 层级，使用时应指向该层；不存在镜像测试集。两组训练图片各 50,000 张、100 类，每类各 500 张，类别目录与文件名一一对应。
-
-## ConvNeXt V2：gududegenbai3
-
-冻结 CNN 主干 `convnextv2_base.fcmae_ft_in22k_in1k_384`，仅训练 `Linear(1024, 100)`。原临时目录 `convenext/` 已按职责归入 `pipeline/`、`tools/`、`configs/` 和模型域；当前入口为 `python -m pipeline.convnext`。模型实现仍只有 `models/convnextv2_base_gududegenbai3.py` 一个文件。
-
-已归档 AutoDL 运行 `convnext_20261025_143320`：原图及镜像共 100,000 张，验证选定 5 轮后全量重新拟合，在原始 10,000 张测试图上取得 **88.44%** accuracy，平均交叉熵 **0.3821988663**。分类头位于 `checkpoints/convnextv2_base_gududegenbai3/convnext_20261025_143320/final.pt`，原始评分、逐样本预测及混淆矩阵位于同名 `results/` 运行目录。此次整理未重新训练或重新评分。
-
-云端使用镜像自带 Python 3.12；实际训练环境为 PyTorch 2.8.0+cu128、torchvision 0.23.0+cu128、RTX PRO 6000 Blackwell 96GB。原训练源码和配置以文本形式保存在该次运行的 `provenance/`，可核对 `environment.json` 的源码哈希；历史快照与评分未改写。
-
-```sh
-# 以下命令从项目根目录执行；训练必须使用新 run_id
-python -m pipeline.convnext validate
-python -m pipeline.convnext prepare
-python -m pipeline.convnext train --run-id mirror_run02
-```
-
-详细预训练依赖、分组验证协议、AutoDL 操作及结果说明见 [ConvNeXt 训练与实验记录](results/convnextv2_base_gududegenbai3/README.md)。当前仍固定联合原图和镜像，不支持关闭镜像的参数；无镜像对照尚未实现或运行，现有分数不能单独证明增强的收益。
 
 ## 各文件的作用
 
@@ -120,17 +105,6 @@ python -m pipeline.convnext train --run-id mirror_run02
 - `AGENTS.md`：面向 AI 的操作规范，规定问题定位、命名、接口、评分及文档同步方式；其中所有者专属规则区只能由项目所有者本人手动修改。
 - `requirements.txt`：Python 运行依赖清单。PyTorch 负责训练与推理，Transformers 提供 DINOv2、DINOv3 和图像预处理，Hugging Face Hub 负责显式下载预训练文件，Pillow 读取图片，safetensors 加载预训练张量参数。通过 `python -m pip install -r requirements.txt` 安装；这是版本范围约束，不是完整依赖锁文件。
 - `.gitignore`：忽略虚拟环境、预训练缓存、Python 字节码和系统生成文件，避免把这些本地产物新增到版本管理中。
-
-### ConvNeXt V2 文件
-
-- `pipeline/convnext.py`：缓存特征的训练编排入口，提供 validate/prepare/train，校验原图与镜像对应关系、固定主干版本、分组验证选轮数、全训练集重拟合并保存测试评分；配置格式独立于通用 `pipeline` 入口。
-- `tools/check_convnext_environment.py`：读取根依赖清单及环境配置，检查依赖、Blackwell CUDA 运算和分类头梯度；只用随机网络和合成图片，不下载权重或计算真实数据集评分。
-- `configs/convnextv2_base_environment.json`：AutoDL 目标环境、模型输入尺寸和 GPU 架构约定；依赖统一由根目录 `requirements.txt` 声明。
-- `models/convnextv2_base_gududegenbai3.py`：冻结 ConvNeXt V2 主干和独立线性分类头的标准函数适配器。
-- `configs/convnextv2_base_gududegenbai3.json`：训练数据路径、特征批量、验证比例、精度、优化器参数与模型来源，供 `pipeline.convnext` 使用。
-- `results/convnextv2_base_gududegenbai3/README.md`：操作说明、正式实验评分和参数依赖。
-- `tests/test_convnext_training.py`：分组划分、离线微型 ConvNeXt 训练/保存/重载、指标及防覆盖测试。
-- `tests/test_convnext_evidence.py`：核对云端真实运行的逐样本预测、混淆矩阵、分组划分、所选轮数、权重与原始源码哈希。
 
 ### 数据与模型文件
 
@@ -253,7 +227,7 @@ results/<model_key>/<run_id>/history.json
 
 ## 已训练模型与成果
 
-当前已完成 **DINOv2-Small + 线性分类头** 的训练与评估。
+### **DINOv2-Small + 线性分类头** 
 
 - 预训练模型：[Meta DINOv2-Small](https://huggingface.co/facebook/dinov2-small)。
 - 训练方式：冻结主干，仅训练 `Linear(384, 100)` 分类头，共 38,500 个可训练参数。
@@ -269,9 +243,26 @@ results/<model_key>/<run_id>/history.json
 
 评估文件 [metrics.json](results/dinov2_linear_probe/formal/run01/metrics.json) 已包含 100×100 混淆矩阵；训练记录见 [history.json](results/dinov2_linear_probe/formal/run01/history.json)。历史实验未按新命名约定记录 GitHub 用户名，保留原名，不推断贡献者身份；新提交按上述约定执行。
 
-## DINOv3 ViT-L/16：yjqsh233
+### ConvNeXt V2：gududegenbai3
 
-模型为 Meta `facebook/dinov3-vitl16-pretrain-lvd1689m`，固定版本 `ea8dc2863c51be0a264bab82070e3e8836b02d51`。原实验在单张 Tesla T4 16GB、Python 3.12、PyTorch 2.8.0+cu128 上完成。全部 60,000 张原实验图片与仓库 PNG 的 Git blob 哈希一致。
+冻结 CNN 主干 `convnextv2_base.fcmae_ft_in22k_in1k_384`，仅训练 `Linear(1024, 100)`。原临时目录 `convenext/` 已按职责归入 `pipeline/`、`tools/`、`configs/` 和模型域；当前入口为 `python -m pipeline.convnext`。模型实现仍只有 `models/convnextv2_base_gududegenbai3.py` 一个文件。
+
+已归档 AutoDL 运行 `convnext_20261025_143320`：原图及镜像共 100,000 张，验证选定 5 轮后全量重新拟合，在原始 10,000 张测试图上取得 **88.44%** accuracy，平均交叉熵 **0.3821988663**。分类头位于 `checkpoints/convnextv2_base_gududegenbai3/convnext_20261025_143320/final.pt`，原始评分、逐样本预测及混淆矩阵位于同名 `results/` 运行目录。此次整理未重新训练或重新评分。
+
+云端使用镜像自带 Python 3.12；实际训练环境为 PyTorch 2.8.0+cu128、torchvision 0.23.0+cu128、RTX PRO 6000 Blackwell 96GB。原训练源码和配置以文本形式保存在该次运行的 `provenance/`，可核对 `environment.json` 的源码哈希；历史快照与评分未改写。
+
+```sh
+# 以下命令从项目根目录执行；训练必须使用新 run_id
+python -m pipeline.convnext validate
+python -m pipeline.convnext prepare
+python -m pipeline.convnext train --run-id mirror_run02
+```
+
+详细预训练依赖、分组验证协议、AutoDL 操作及结果说明见 [ConvNeXt 训练与实验记录](results/convnextv2_base_gududegenbai3/README.md)。当前仍固定联合原图和镜像，不支持关闭镜像的参数；无镜像对照尚未实现或运行，现有分数不能单独证明增强的收益。
+
+### DINOv3 ViT-L/16：yjqsh233
+
+模型为 Meta `facebook/dinov3-vitl16-pretrain-lvd1689m`，固定版本 `ea8dc2863c51be0a264bab82070e3e8836b02d51`。实验在单张 Tesla T4 16GB、Python 3.12、PyTorch 2.8.0+cu128 上完成。全部 60,000 张原实验图片与仓库 PNG 的 Git blob 哈希一致。
 
 | 运行目录（`results/dinov3_vitl16_yjqsh233/` 下） | 数据划分 | Top-1 | 平均交叉熵 |
 | --- | --- | --- | --- |
@@ -283,6 +274,7 @@ results/<model_key>/<run_id>/history.json
 微调第 1–3 轮均未超过第 0 轮的 93.34% 验证准确率。第 3 轮候选没有测试集评分；保留方案的测试分数来自原主干与完整训练集重新拟合的分类头，不能归因于微调提升。各目录含真实 100×100 混淆矩阵、逐样本预测、配置、历史、划分、环境和参数哈希。
 
 详细协议、权重依赖、复核方式及精度差异见 [实验记录](results/dinov3_vitl16_yjqsh233/README.md)。DINOv3 紧凑参数保存在同名 `checkpoints/` 子目录，需先准备固定版本的外部主干；[DINOv3 License](checkpoints/dinov3_vitl16_yjqsh233/LICENSE.md) 随参数提供。已有 DINOv2 成果继续保留。
+
 ### DINOv3 ViT-L/16 + MLP 分类头（JackChen070421）· v1 无数据增强
 
 - 预训练模型：[facebook/dinov3-vitl16-pretrain-lvd1689m](https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m)，固定 revision `ea8dc2863c51be0a264bab82070e3e8836b02d51`。
