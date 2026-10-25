@@ -28,6 +28,8 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 ├── AGENTS.md
 ├── README.md
 ├── checkpoints/
+│   ├── convnextv2_base_gududegenbai3/
+│   │   └── …
 │   ├── dinov2_linear_probe/
 │   │   └── …
 │   ├── dinov3_vitl16_JackChen070421/
@@ -35,6 +37,8 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   └── dinov3_vitl16_yjqsh233/
 │       └── …
 ├── configs/
+│   ├── convnextv2_base_environment.json
+│   ├── convnextv2_base_gududegenbai3.json
 │   ├── dinov2_linear_probe.json
 │   ├── dinov2_small_gududegenbai3.json
 │   ├── dinov3_vitl16_JackChen070421.json
@@ -50,6 +54,7 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │       └── …
 ├── models/
 │   ├── README.md
+│   ├── convnextv2_base_gududegenbai3.py
 │   ├── dinov2_small_gududegenbai3.py
 │   ├── dinov3_vitl16_JackChen070421.py
 │   └── dinov3_vitl16_yjqsh233.py
@@ -57,12 +62,15 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── __init__.py
 │   ├── __main__.py
 │   ├── config.py
+│   ├── convnext.py
 │   ├── data.py
 │   ├── metrics.py
 │   ├── model_api.py
 │   └── runner.py
 ├── requirements.txt
 ├── results/
+│   ├── convnextv2_base_gududegenbai3/
+│   │   └── …
 │   ├── dinov2_linear_probe/
 │   │   └── …
 │   ├── dinov3_vitl16_JackChen070421/
@@ -70,10 +78,13 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   └── dinov3_vitl16_yjqsh233/
 │       └── …
 ├── tests/
+│   ├── test_convnext_evidence.py
+│   ├── test_convnext_training.py
 │   ├── test_dinov3_evidence.py
 │   ├── test_dinov3_submission.py
 │   └── test_workflow.py
 └── tools/
+    ├── check_convnext_environment.py
     └── sync_docs.py
 ```
 <!-- PROJECT_STRUCTURE_END -->
@@ -81,6 +92,23 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 模型域保留现有平级目录，不搬动历史权重和结果。模型接入详见 [models/README.md](models/README.md)。
 
 数据域由 `dataset/` 与 `dataset_mirror/` 组成：原始训练图片位于 `dataset/train/<类别>/`，镜像训练图片位于 `dataset_mirror/train/<类别>/`，原始测试图片位于 `dataset/test/<类别>/`。镜像目录新增了 `train/` 层级，使用时应指向该层；不存在镜像测试集。两组训练图片各 50,000 张、100 类，每类各 500 张，类别目录与文件名一一对应。
+
+## ConvNeXt V2：gududegenbai3
+
+冻结 CNN 主干 `convnextv2_base.fcmae_ft_in22k_in1k_384`，仅训练 `Linear(1024, 100)`。原临时目录 `convenext/` 已按职责归入 `pipeline/`、`tools/`、`configs/` 和模型域；当前入口为 `python -m pipeline.convnext`。模型实现仍只有 `models/convnextv2_base_gududegenbai3.py` 一个文件。
+
+已归档 AutoDL 运行 `convnext_20261025_143320`：原图及镜像共 100,000 张，验证选定 5 轮后全量重新拟合，在原始 10,000 张测试图上取得 **88.44%** accuracy，平均交叉熵 **0.3821988663**。分类头位于 `checkpoints/convnextv2_base_gududegenbai3/convnext_20261025_143320/final.pt`，原始评分、逐样本预测及混淆矩阵位于同名 `results/` 运行目录。此次整理未重新训练或重新评分。
+
+云端使用镜像自带 Python 3.12；实际训练环境为 PyTorch 2.8.0+cu128、torchvision 0.23.0+cu128、RTX PRO 6000 Blackwell 96GB。原训练源码和配置以文本形式保存在该次运行的 `provenance/`，可核对 `environment.json` 的源码哈希；历史快照与评分未改写。
+
+```sh
+# 以下命令从项目根目录执行；训练必须使用新 run_id
+python -m pipeline.convnext validate
+python -m pipeline.convnext prepare
+python -m pipeline.convnext train --run-id mirror_run02
+```
+
+详细预训练依赖、分组验证协议、AutoDL 操作及结果说明见 [ConvNeXt 训练与实验记录](results/convnextv2_base_gududegenbai3/README.md)。当前仍固定联合原图和镜像，不支持关闭镜像的参数；无镜像对照尚未实现或运行，现有分数不能单独证明增强的收益。
 
 ## 各文件的作用
 
@@ -92,6 +120,17 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 - `AGENTS.md`：面向 AI 的操作规范，规定问题定位、命名、接口、评分及文档同步方式；其中所有者专属规则区只能由项目所有者本人手动修改。
 - `requirements.txt`：Python 运行依赖清单。PyTorch 负责训练与推理，Transformers 提供 DINOv2、DINOv3 和图像预处理，Hugging Face Hub 负责显式下载预训练文件，Pillow 读取图片，safetensors 加载预训练张量参数。通过 `python -m pip install -r requirements.txt` 安装；这是版本范围约束，不是完整依赖锁文件。
 - `.gitignore`：忽略虚拟环境、预训练缓存、Python 字节码和系统生成文件，避免把这些本地产物新增到版本管理中。
+
+### ConvNeXt V2 文件
+
+- `pipeline/convnext.py`：缓存特征的训练编排入口，提供 validate/prepare/train，校验原图与镜像对应关系、固定主干版本、分组验证选轮数、全训练集重拟合并保存测试评分；配置格式独立于通用 `pipeline` 入口。
+- `tools/check_convnext_environment.py`：读取根依赖清单及环境配置，检查依赖、Blackwell CUDA 运算和分类头梯度；只用随机网络和合成图片，不下载权重或计算真实数据集评分。
+- `configs/convnextv2_base_environment.json`：AutoDL 目标环境、模型输入尺寸和 GPU 架构约定；依赖统一由根目录 `requirements.txt` 声明。
+- `models/convnextv2_base_gududegenbai3.py`：冻结 ConvNeXt V2 主干和独立线性分类头的标准函数适配器。
+- `configs/convnextv2_base_gududegenbai3.json`：训练数据路径、特征批量、验证比例、精度、优化器参数与模型来源，供 `pipeline.convnext` 使用。
+- `results/convnextv2_base_gududegenbai3/README.md`：操作说明、正式实验评分和参数依赖。
+- `tests/test_convnext_training.py`：分组划分、离线微型 ConvNeXt 训练/保存/重载、指标及防覆盖测试。
+- `tests/test_convnext_evidence.py`：核对云端真实运行的逐样本预测、混淆矩阵、分组划分、所选轮数、权重与原始源码哈希。
 
 ### 数据与模型文件
 
@@ -131,7 +170,7 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 
 下列文件由新公共流程按 `model_key` 和 `run_id` 隔离保存；文档列出它们的用途，不表示已经完成了新的全量训练。
 
-- `checkpoints/<model_key>/<run_id>/final.pt`：公共训练保存完整 `state_dict`；JackChen070421 的已提交 DINOv3 权重仅保存分类头，yjqsh233 的紧凑权重保存分类头、归一化统计及实际训练的主干层。后两者需要固定版本的外部预训练主干；各封装记录模型身份、类别映射和配置，不包含优化器恢复状态。
+- `checkpoints/<model_key>/<run_id>/final.pt`：公共训练保存完整 `state_dict`；JackChen070421 的已提交 DINOv3 权重仅保存分类头，yjqsh233 的紧凑权重保存分类头、归一化统计及实际训练的主干层。ConvNeXt 的 `convnext_head_v1` 权重也只含分类头。紧凑权重需要固定版本的外部预训练主干；各封装记录模型身份、类别映射和配置，不包含优化器恢复状态。
 - `results/<model_key>/<run_id>/config_snapshot.json`：这次运行实际使用的配置快照，包括命令行覆盖后的运行编号。
 - `results/<model_key>/<run_id>/class_to_idx.json`：类别名称到整数索引的映射，用于解释输出列和混淆矩阵，并校验权重与数据是否匹配。
 - `results/<model_key>/<run_id>/history.json`：逐轮训练准确率、损失和耗时；单独评估时为空列表。
@@ -177,7 +216,7 @@ predict(model, inputs) -> logits
 ```
 
 配置由调用方读取 JSON 后传入，权重由路径加载；`inputs` 为已预处理的批量图像，`logits` 为 `[batch_size, num_classes]` 的未归一化分类分数。
-数据读取、训练调度与指标计算由公共流程负责。已由 `pipeline/` 实现公共流程，当前模型代码包括 `models/dinov2_small_gududegenbai3.py`、`models/dinov3_vitl16_JackChen070421.py` 和 `models/dinov3_vitl16_yjqsh233.py`，分别使用同名 JSON 配置；历史实验的具体配置以对应运行快照为准。
+数据读取、训练调度与指标计算由公共流程负责。已由 `pipeline/` 实现公共流程，通用入口支持 `models/dinov2_small_gududegenbai3.py`、`models/dinov3_vitl16_JackChen070421.py` 和 `models/dinov3_vitl16_yjqsh233.py`；ConvNeXt 使用相同模型函数接口及 `pipeline.convnext` 编排入口。各模型分别使用同名 JSON 配置；历史实验的具体配置以对应运行快照为准。
 
 新模型的交付路径约定如下，尖括号为待替换的占位符：
 
@@ -316,7 +355,7 @@ python -m pipeline train --config configs/dinov2_small_gududegenbai3.json --run-
 `validate` 使用标准库即可运行，不导入模型，检查配置、接口声明和训练/测试类别映射；不代表执行过网络推理。
 `prepare` 是显式联网步骤，缓存固定版本的模型配置、预处理及 safetensors 权重；训练与评估只读取本地文件。
 训练由 AdamW 更新可训练参数，使用交叉熵损失；冻结 DINOv2 主干时只更新分类头，主干保持 eval 模式。
-当前公共训练逐批处理图片，不缓存全量特征，计算成本与历史基线的缓存方案不同；不会自动启动完整数据集训练。
+通用 `python -m pipeline` 训练逐批处理图片，不缓存全量特征；`python -m pipeline.convnext` 使用缓存特征方案。通用流程计算成本与历史基线的缓存方案不同；不会自动启动完整数据集训练。
 
 训练后用新的运行编号复评已保存权重：
 

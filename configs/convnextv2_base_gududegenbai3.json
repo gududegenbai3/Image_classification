@@ -1,0 +1,33 @@
+{
+  "model_key": "convnextv2_base_gududegenbai3",
+  "github_username": "gududegenbai3",
+  "model": {
+    "name": "convnextv2_base.fcmae_ft_in22k_in1k_384",
+    "repository": "timm/convnextv2_base.fcmae_ft_in22k_in1k_384",
+    "revision": null,
+    "model_kwargs": {},
+    "feature_dim": 1024
+  },
+  "data": {
+    "original_dir": "dataset/train",
+    "mirror_dir": "dataset_mirror/train",
+    "test_dir": "dataset/test",
+    "num_classes": 100,
+    "expected_original_samples": 50000,
+    "expected_test_samples": 10000,
+    "validation_fraction": 0.1
+  },
+  "runtime": {
+    "device": "cuda",
+    "seed": 42,
+    "feature_batch_size": 16,
+    "workers": 4,
+    "precision": "bf16"
+  },
+  "training": {
+    "max_epochs": 20,
+    "head_batch_size": 1024,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001
+  }
+}

@@ -43,6 +43,8 @@
 ├── AGENTS.md
 ├── README.md
 ├── checkpoints/
+│   ├── convnextv2_base_gududegenbai3/
+│   │   └── …
 │   ├── dinov2_linear_probe/
 │   │   └── …
 │   ├── dinov3_vitl16_JackChen070421/
@@ -50,6 +52,8 @@
 │   └── dinov3_vitl16_yjqsh233/
 │       └── …
 ├── configs/
+│   ├── convnextv2_base_environment.json
+│   ├── convnextv2_base_gududegenbai3.json
 │   ├── dinov2_linear_probe.json
 │   ├── dinov2_small_gududegenbai3.json
 │   ├── dinov3_vitl16_JackChen070421.json
@@ -65,6 +69,7 @@
 │       └── …
 ├── models/
 │   ├── README.md
+│   ├── convnextv2_base_gududegenbai3.py
 │   ├── dinov2_small_gududegenbai3.py
 │   ├── dinov3_vitl16_JackChen070421.py
 │   └── dinov3_vitl16_yjqsh233.py
@@ -72,12 +77,15 @@
 │   ├── __init__.py
 │   ├── __main__.py
 │   ├── config.py
+│   ├── convnext.py
 │   ├── data.py
 │   ├── metrics.py
 │   ├── model_api.py
 │   └── runner.py
 ├── requirements.txt
 ├── results/
+│   ├── convnextv2_base_gududegenbai3/
+│   │   └── …
 │   ├── dinov2_linear_probe/
 │   │   └── …
 │   ├── dinov3_vitl16_JackChen070421/
@@ -85,10 +93,13 @@
 │   └── dinov3_vitl16_yjqsh233/
 │       └── …
 ├── tests/
+│   ├── test_convnext_evidence.py
+│   ├── test_convnext_training.py
 │   ├── test_dinov3_evidence.py
 │   ├── test_dinov3_submission.py
 │   └── test_workflow.py
 └── tools/
+    ├── check_convnext_environment.py
     └── sync_docs.py
 ```
 <!-- PROJECT_STRUCTURE_END -->
@@ -96,6 +107,16 @@
 数据域由 `dataset/` 与 `dataset_mirror/` 组成，镜像训练图片的读取根目录为 `dataset_mirror/train/`，不是 `dataset_mirror/`。模型域由 `models/`、`configs/`、`checkpoints/`、`results/` 共同组成。`pipeline/` 是连接两个域的公共流程；`tools/`、`.githooks/`、`.github/`、`tests/` 提供文档同步和验证。保留现有平级目录，避免破坏已有成果引用。
 
 逐文件职责见 `README.md` 的“各文件的作用”章节；运行依赖由根目录 `requirements.txt` 声明，修改直接使用的第三方依赖时同步维护该清单。
+
+ConvNeXt V2 原临时目录 `convenext/` 已完成职责归位：模型单文件为 `models/convnextv2_base_gududegenbai3.py`，训练配置为 `configs/convnextv2_base_gududegenbai3.json`，缓存特征编排为 `pipeline/convnext.py`，入口为 `python -m pipeline.convnext`（validate/prepare/train）。环境检查为 `tools/check_convnext_environment.py`，环境目标配置为 `configs/convnextv2_base_environment.json`，直接依赖统一由根目录 `requirements.txt` 声明。不再使用或重新创建临时目录。
+
+云端使用 AutoDL 镜像自带 Python 3.12，不创建或激活额外环境。RTX PRO 6000 Blackwell 使用支持其架构的 CUDA 构建；已完成运行使用 PyTorch 2.8.0+cu128、torchvision 0.23.0+cu128、timm 1.0.22。prepare 显式下载并固定 Hugging Face commit SHA 与文件 SHA256，缓存位置继续为 `.cache/<model_key>/`；train 只读取本地已准备权重。目录迁移不改变既有缓存布局。
+
+ConvNeXt 流程缓存原图/镜像的固定特征，按原图身份分层划分：45,000 原图及对应镜像共 90,000 张用于选择训练，5,000 原图用于验证，其镜像不参与选择训练。验证选定轮数后重新初始化头，在全部 100,000 张特征上拟合，再重新加载保存的分类头，对原始 10,000 张测试图评分一次。不得把镜像与原图随机拆分到两侧。只缓存特征，不改动真实图片或物理划分。失败运行保留状态，重试使用新 run_id，不自动覆盖或续训。当前没有关闭镜像的配置或命令参数，无镜像对照尚未实现或运行。
+
+此配置格式供 `python -m pipeline.convnext` 使用，不直接传入通用 `python -m pipeline`。权重只保存分类头及模型身份/配置/类别映射，依赖固定外部主干。输出遵守根目录 checkpoints/results 命名；快照记录解析后的版本及预处理。特征缓存位于 `.cache/features/<model_key>/<run_id>/`，不提交 Git。
+
+已从用户下载包归档真实运行 `convnext_20261025_143320`：模型与结果分别移入 `checkpoints/convnextv2_base_gududegenbai3/` 和 `results/convnextv2_base_gududegenbai3/`，保留原 run_id 及全部原始文件字节。验证选择 5 轮，原始 test 10,000 张 accuracy 为 0.8844、平均交叉熵为 0.38219886627197264。`provenance/` 保存原源码文本、基础配置、预训练来源及逐文件迁移哈希；不得为了反映新入口而回写历史快照、环境哈希或评分。说明见 `results/convnextv2_base_gududegenbai3/README.md`；真实证据由 `tests/test_convnext_evidence.py` 校验。此次整理未重新执行真实训练或评估。
 
 ## AI 面对问题时的位置与处理方式
 
@@ -183,3 +204,16 @@ python -m pipeline evaluate --config configs/dinov3_vitl16_JackChen070421.json -
 - 公共流程使用 HF 预处理和 AdamW，历史实验使用 PIL resize、缓存特征 SGD 或分组 AdamW；不要把公共 `train` 命令称为历史训练的精确复现。历史评分的评估路径以每个 `metrics.json` 为准。
 - `tests/test_dinov3_submission.py` 检查微型模型接口；`tests/test_dinov3_evidence.py` 核对真实评分、混淆矩阵、逐样本预测及参数哈希。DINOv3 许可位于 `checkpoints/dinov3_vitl16_yjqsh233/LICENSE.md`。
 
+
+## ConvNeXt 归档后的操作入口
+
+从项目根目录运行：
+
+```sh
+python -m pipeline.convnext validate
+python -m pipeline.convnext prepare
+python tools/check_convnext_environment.py
+python -m pipeline.convnext train --run-id mirror_run02
+```
+
+`pipeline/convnext.py` 负责模型之外的数据检查、特征提取、训练调度、指标和运行记录；模型结构及参数加载仍通过模型单文件函数调用。`python -m pipeline` 的 DINO 接口和原有配置保持兼容，不将 ConvNeXt 配置误传给该通用入口。

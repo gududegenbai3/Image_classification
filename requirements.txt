@@ -8,3 +8,9 @@ huggingface-hub>=0.34,<1
 Pillow>=10,<13
 # Loading pretrained tensor weights
 safetensors>=0.4,<1
+# ConvNeXt V2 adapter and timm image transforms
+timm==1.0.22
+torchvision>=0.22,<1
+# Cached feature extraction progress and environment version checks
+tqdm>=4.60,<5
+packaging>=20.9,<27

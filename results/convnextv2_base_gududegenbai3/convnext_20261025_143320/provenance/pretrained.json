@@ -1,0 +1,7 @@
+{
+  "repository": "timm/convnextv2_base.fcmae_ft_in22k_in1k_384",
+  "revision": "bea9dc139d5981aff6ce4d6d9690086e45ad8b56",
+  "directory": ".cache/convnextv2_base_gududegenbai3/bea9dc139d5981aff6ce4d6d9690086e45ad8b56",
+  "weights_sha256": "972bcbb8d9965eca7a2f72d9592f54dfc890f9e6aef920cea4269963f46f2f42",
+  "config_sha256": "1210c9caf39c055d801bf8249c9327e9ba2ef649b510ad5808dda40560954331"
+}
