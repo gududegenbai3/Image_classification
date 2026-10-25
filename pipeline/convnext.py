@@ -1,0 +1,360 @@
+"""Cached ConvNeXt head workflow: python -m pipeline.convnext {validate,prepare,train}."""
+
+import argparse
+from copy import deepcopy
+from datetime import datetime, timezone
+import hashlib
+import importlib.metadata
+import importlib.util
+import json
+from pathlib import Path
+import platform
+import random
+import re
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CONFIG = 'configs/convnextv2_base_gududegenbai3.json'
+
+
+def write_json(path, value):
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False) + '\n')
+
+
+def file_hash(path):
+    digest = hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def local_path(root, value):
+    path = (root / value).resolve()
+    if not path.is_relative_to(root.resolve()):
+        raise ValueError(f'Path escapes repository: {value}')
+    return path
+
+
+def load_config(path):
+    config = json.loads(Path(path).read_text())
+    name = config['model']['name'].split('.')[0]
+    if config['model_key'] != f"{name}_{config['github_username']}":
+        raise ValueError('model_key must match pretrained name and GitHub username')
+    if not re.fullmatch(r'[A-Za-z0-9_-]+', config['model_key']):
+        raise ValueError('Invalid model_key')
+    for field in ['max_epochs', 'head_batch_size']:
+        if type(config['training'][field]) is not int or config['training'][field] < 1:
+            raise ValueError(f'Invalid {field}')
+    if not 0 < config['data']['validation_fraction'] < 1:
+        raise ValueError('validation_fraction must be between zero and one')
+    if config['runtime']['precision'] not in ['fp32', 'bf16', 'fp16']:
+        raise ValueError('Unsupported extraction precision')
+    if config['runtime']['feature_batch_size'] < 1 or config['runtime']['workers'] < 0:
+        raise ValueError('Invalid feature batch size or worker count')
+    if config['training']['learning_rate'] <= 0 or config['training']['weight_decay'] < 0:
+        raise ValueError('Invalid optimizer settings')
+    return config
+
+
+def inspect_data(config, root):
+    # Standard-library validation works before any GPU/model initialization.
+    extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.webp'}
+    def scan(value, mapping=None):
+        folder = local_path(root, value)
+        names = sorted(p.name for p in folder.iterdir() if p.is_dir())
+        current = {name: i for i, name in enumerate(names)}
+        if not names or (mapping is not None and current != mapping):
+            raise ValueError(f'Empty/inconsistent classes: {value}')
+        samples = []
+        for name in names:
+            images = sorted(p for p in (folder / name).iterdir()
+                            if p.is_file() and p.suffix.lower() in extensions)
+            if not images:
+                raise ValueError(f'Empty class: {value}/{name}')
+            samples.extend((p, current[name]) for p in images)
+        return folder, samples, current
+    original_root, original, mapping = scan(config['data']['original_dir'])
+    mirror_root, mirror, _ = scan(config['data']['mirror_dir'], mapping)
+    test_root, test, _ = scan(config['data']['test_dir'], mapping)
+    roots = [original_root, mirror_root, test_root]
+    if any(a == b or a in b.parents or b in a.parents for i, a in enumerate(roots) for b in roots[i+1:]):
+        raise ValueError('Data roots must be separate')
+    if len(mapping) != config['data']['num_classes']:
+        raise ValueError('Wrong number of classes')
+    if [(p.relative_to(original_root), y) for p, y in original] != [(p.relative_to(mirror_root), y) for p, y in mirror]:
+        raise ValueError('Each original must have exactly one matching mirror filename/label')
+    if len(original) != config['data']['expected_original_samples'] or len(test) != config['data']['expected_test_samples']:
+        raise ValueError('Dataset counts differ from configuration')
+    return original, mirror, test, mapping
+
+
+def grouped_split(labels, fraction, seed):
+    rng = random.Random(seed)
+    train, validation = [], []
+    for label in sorted(set(labels)):
+        indices = [i for i, value in enumerate(labels) if value == label]
+        if len(indices) < 2:
+            raise ValueError('Need at least two original images per class')
+        rng.shuffle(indices)
+        count = min(len(indices)-1, max(1, round(len(indices)*fraction)))
+        validation.extend(indices[:count])
+        train.extend(indices[count:])
+    return sorted(train), sorted(validation)
+
+
+def manifest_path(root, config):
+    return root / '.cache' / config['model_key'] / 'pretrained.json'
+
+
+def prepare(config, root):
+    from huggingface_hub import HfApi, snapshot_download
+    path = manifest_path(root, config)
+    if path.exists():
+        resolve_pretrained(config, root)
+        print(f'Existing pinned pretrained snapshot verified: {path}')
+        return
+    model = config['model']
+    revision = model.get('revision') or HfApi().model_info(model['repository']).sha
+    if not re.fullmatch(r'[0-9a-f]{40}', revision):
+        raise ValueError('Pretrained revision must resolve to a commit SHA')
+    folder = path.parent / revision
+    snapshot_download(repo_id=model['repository'], revision=revision, local_dir=str(folder),
+                      allow_patterns=['config.json', 'model.safetensors', 'README.md'])
+    value = {'repository': model['repository'], 'revision': revision,
+             'directory': str(folder.relative_to(root)),
+             'weights_sha256': file_hash(folder/'model.safetensors'),
+             'config_sha256': file_hash(folder/'config.json')}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('x') as stream:
+        json.dump(value, stream, indent=2)
+    print(f'Prepared fixed revision {revision}: {folder}')
+
+
+def resolve_pretrained(config, root):
+    path = manifest_path(root, config)
+    if not path.exists():
+        raise ValueError('No prepared weights: run the prepare command first')
+    value = json.loads(path.read_text())
+    if value['repository'] != config['model']['repository']:
+        raise ValueError('Prepared repository differs')
+    if config['model'].get('revision') not in [None, value['revision']]:
+        raise ValueError('Prepared revision differs')
+    folder = local_path(root, value['directory'])
+    if file_hash(folder/'model.safetensors') != value['weights_sha256'] or file_hash(folder/'config.json') != value['config_sha256']:
+        raise ValueError('Prepared file checksum mismatch')
+    result = deepcopy(config)
+    result['model'].update(revision=value['revision'], pretrained_dir=str(folder),
+                           pretrained_sha256=value['weights_sha256'])
+    return result
+
+
+class ImageSamples:
+    def __init__(self, samples, transform):
+        self.samples, self.transform = samples, transform
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, index):
+        from PIL import Image
+        path, label = self.samples[index]
+        with Image.open(path) as image:
+            return self.transform(image.convert('RGB')), label
+
+
+def extract(model, samples, transform, config, device, destination):
+    import torch
+    from torch.utils.data import DataLoader
+    from tqdm import tqdm
+    features = torch.empty((len(samples), config['model']['feature_dim']), dtype=torch.float32)
+    labels = torch.tensor([label for _, label in samples], dtype=torch.long)
+    loader = DataLoader(ImageSamples(samples, transform), batch_size=config['runtime']['feature_batch_size'],
+                        shuffle=False, num_workers=config['runtime']['workers'], pin_memory=device.type == 'cuda')
+    precision = config['runtime']['precision']
+    enabled = device.type == 'cuda' and precision != 'fp32'
+    dtype = torch.bfloat16 if precision == 'bf16' else torch.float16
+    offset = 0
+    model.backbone.eval()
+    with torch.inference_mode():
+        for images, _ in tqdm(loader, desc=destination.stem):
+            with torch.autocast(device.type, dtype=dtype, enabled=enabled):
+                values = model.backbone(images.to(device, non_blocking=True)).float().cpu()
+            if not torch.isfinite(values).all():
+                raise ValueError('Non-finite extracted features')
+            features[offset:offset+len(values)].copy_(values)
+            offset += len(values)
+    torch.save({'features': features, 'labels': labels}, destination)
+    return features, labels
+
+
+def seed_all(seed):
+    import torch
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def fit_epoch(head, optimizer, features, labels, config, device):
+    import torch
+    head.train()
+    order = torch.randperm(len(labels))
+    total_loss, correct = 0., 0
+    for indices in order.split(config['training']['head_batch_size']):
+        x, y = features[indices].to(device), labels[indices].to(device)
+        optimizer.zero_grad(set_to_none=True)
+        logits = head(x)
+        loss = torch.nn.functional.cross_entropy(logits, y)
+        if not torch.isfinite(loss):
+            raise ValueError('Non-finite head training loss')
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()*len(y)
+        correct += (logits.argmax(1) == y).sum().item()
+    return {'accuracy': correct/len(labels), 'cross_entropy_loss': total_loss/len(labels)}
+
+
+def evaluate(head, features, labels, config, device):
+    import torch
+    head.eval()
+    guesses, losses = [], 0.
+    with torch.inference_mode():
+        for start in range(0, len(labels), config['training']['head_batch_size']):
+            end = start+config['training']['head_batch_size']
+            logits = head(features[start:end].to(device))
+            losses += torch.nn.functional.cross_entropy(logits, labels[start:end].to(device), reduction='sum').item()
+            guesses.append(logits.argmax(1).cpu())
+    predicted = torch.cat(guesses)
+    classes = config['data']['num_classes']
+    matrix = torch.bincount(labels*classes+predicted, minlength=classes**2).reshape(classes, classes)
+    return {'samples': len(labels), 'accuracy': (predicted == labels).sum().item()/len(labels),
+            'cross_entropy_loss': losses/len(labels), 'confusion_matrix': matrix.tolist()}, predicted
+
+
+def train(config, root, run_id):
+    import torch
+    import timm
+    from timm.data import resolve_model_data_config, create_transform
+    root = root.resolve()
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', run_id):
+        raise ValueError('Invalid run_id')
+    key = config['model_key']
+    results, checkpoints = root/'results'/key/run_id, root/'checkpoints'/key/run_id
+    cache = root/'.cache'/'features'/key/run_id
+    if any(p.exists() for p in [results, checkpoints, cache]):
+        raise FileExistsError('Run already exists: use a new --run-id')
+    original, mirror, test, mapping = inspect_data(config, root)
+    config = resolve_pretrained(config, root)
+    config.update(run_id=run_id, class_to_idx=mapping)
+    device = torch.device(config['runtime']['device'])
+    if device.type == 'cuda' and not torch.cuda.is_available():
+        raise ValueError('CUDA unavailable; verify the Python 3.12 image environment')
+    if device.type == 'cuda' and config['runtime']['precision'] == 'bf16' and not torch.cuda.is_bf16_supported():
+        raise ValueError('BF16 unsupported: explicitly select fp32 or fp16 in the config')
+    seed_all(config['runtime']['seed'])
+    source = root/'models'/f'{key}.py'
+    spec = importlib.util.spec_from_file_location('convnext_submission', source)
+    adapter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(adapter)
+    model = adapter.load_weights(adapter.build_model(config), config['model']['pretrained_dir'], device=device)
+    preprocessing = resolve_model_data_config(model.backbone)
+    transform = create_transform(**preprocessing, is_training=False)
+    for path in [results, checkpoints, cache]:
+        path.mkdir(parents=True, exist_ok=False)
+    try:
+        write_json(results/'status.json', {'state': 'running'})
+        snapshot = deepcopy(config)
+        snapshot['model']['pretrained_dir'] = str(Path(snapshot['model']['pretrained_dir']).relative_to(root))
+        snapshot['preprocessing'] = preprocessing
+        write_json(results/'config_snapshot.json', snapshot)
+        write_json(results/'class_to_idx.json', mapping)
+        versions = {name: importlib.metadata.version(name) for name in ['torch','torchvision','timm','Pillow','huggingface-hub','safetensors']}
+        write_json(results/'environment.json', {'python': platform.python_version(), 'platform': platform.platform(),
+                   'packages': versions, 'device': str(device), 'cuda_runtime': torch.version.cuda,
+                   'gpu': torch.cuda.get_device_name(device) if device.type == 'cuda' else None,
+                   'model_source_sha256': file_hash(source), 'runner_sha256': file_hash(Path(__file__)),
+                   'extraction_precision': config['runtime']['precision'], 'pretrained_sha256': config['model']['pretrained_sha256']})
+        write_json(results/'samples.json', {name: [str(p.relative_to(root)) for p, _ in samples]
+                   for name, samples in [('original', original), ('mirror', mirror), ('test', test)]})
+        xo, yo = extract(model, original, transform, config, device, cache/'original.pt')
+        xm, ym = extract(model, mirror, transform, config, device, cache/'mirror.pt')
+        assert torch.equal(yo, ym)
+        training, validation = grouped_split(yo.tolist(), config['data']['validation_fraction'], config['runtime']['seed'])
+        write_json(results/'split.json', {'selection_train_original_indices': training, 'validation_original_indices': validation,
+                   'index_reference': 'samples.json original list', 'mirrors_follow_original': True,
+                   'validation_uses': 'original_only; corresponding mirrors excluded from selection training',
+                   'final_refit': 'all originals and all mirrors'})
+        all_x, all_y = torch.cat([xo, xm]), torch.cat([yo, ym])
+        rows = training+[i+len(yo) for i in training]
+        train_x, train_y, val_x, val_y = all_x[rows], all_y[rows], xo[validation], yo[validation]
+        def new_head():
+            seed_all(config['runtime']['seed'])
+            head = torch.nn.Linear(config['model']['feature_dim'], len(mapping)).to(device)
+            optimizer = torch.optim.AdamW(head.parameters(), lr=config['training']['learning_rate'],
+                                          weight_decay=config['training']['weight_decay'])
+            return head, optimizer
+        head, optimizer = new_head()
+        selection, best_score, best_epoch = [], None, None
+        for epoch in range(1, config['training']['max_epochs']+1):
+            record = {'epoch': epoch, 'train': fit_epoch(head, optimizer, train_x, train_y, config, device)}
+            values, _ = evaluate(head, val_x, val_y, config, device)
+            record['validation'] = {k: v for k, v in values.items() if k != 'confusion_matrix'}
+            selection.append(record)
+            score = (values['accuracy'], -values['cross_entropy_loss'])
+            if best_score is None or score > best_score:
+                best_score, best_epoch = score, epoch
+            write_json(results/'selection_history.json', selection)
+            print(json.dumps({'stage': 'selection', **record}), flush=True)
+        head, optimizer = new_head()
+        history = []
+        for epoch in range(1, best_epoch+1):
+            record = {'epoch': epoch, **fit_epoch(head, optimizer, all_x, all_y, config, device)}
+            history.append(record)
+            write_json(results/'history.json', history)
+            print(json.dumps({'stage': 'full_refit', **record}), flush=True)
+        weights = checkpoints/'final.pt'
+        torch.save({'format': 'convnext_head_v1', 'model_key': key, 'run_id': run_id,
+                    'head_state_dict': {k: v.detach().cpu() for k, v in head.state_dict().items()},
+                    'class_to_idx': mapping, 'config': snapshot, 'selected_epochs': best_epoch}, weights)
+        model = adapter.load_weights(model, weights, device=device)
+        # Test scoring happens once, after validation selection and full refit.
+        xt, yt = extract(model, test, transform, config, device, cache/'test.pt')
+        metrics, predicted = evaluate(model.head, xt, yt, config, device)
+        metrics.update(model_key=key, run_id=run_id, split='test', selected_epochs=best_epoch,
+                       checkpoint=str(weights.relative_to(root)), checkpoint_sha256=file_hash(weights))
+        write_json(results/'metrics.json', metrics)
+        write_json(results/'predictions.json', {'targets': yt.tolist(), 'predictions': predicted.tolist(),
+                                              'sample_order': 'samples.json test list'})
+        write_json(results/'status.json', {'state': 'complete', 'selected_epochs': best_epoch})
+        print(json.dumps({k: v for k, v in metrics.items() if k != 'confusion_matrix'}, indent=2))
+        return metrics
+    except BaseException as error:
+        write_json(results/'status.json', {'state': 'failed', 'error': str(error)})
+        raise
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('command', choices=['validate', 'prepare', 'train'])
+    parser.add_argument('--config', default=DEFAULT_CONFIG)
+    parser.add_argument('--run-id')
+    args = parser.parse_args()
+    try:
+        config = load_config(local_path(ROOT, args.config))
+        if args.command == 'validate':
+            original, mirror, test, mapping = inspect_data(config, ROOT)
+            print(json.dumps({'classes': len(mapping), 'original': len(original), 'mirror': len(mirror),
+                              'test': len(test), 'training_executed': False}, indent=2))
+        elif args.command == 'prepare':
+            prepare(config, ROOT)
+        else:
+            run_id = args.run_id or datetime.now(timezone.utc).strftime('run_%Y%m%dT%H%M%S_%fZ')
+            train(config, ROOT, run_id)
+    except (ValueError, OSError, ImportError, RuntimeError) as error:
+        parser.exit(1, f'Error: {error}\n')
+
+
+if __name__ == '__main__':
+    main()

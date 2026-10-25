@@ -42,3 +42,9 @@
 请按某次运行的 `results/dinov3_vitl16_yjqsh233/<run_id>/config_snapshot.json` 构建模型，先准备其中固定 revision 的本地预训练文件，再显式加载对应 `final.pt`。分类头、特征统计与实际训练的尾层均在参数文件中，不能只加载分类头来代替微调候选。
 
 提交说明见 [实验记录](../results/dinov3_vitl16_yjqsh233/README.md)。公共 `train` 的优化器及预处理与历史实验不同，基础配置中的历史字段用于记录，不会改变公共训练器的行为。
+
+
+## ConvNeXt V2：gududegenbai3
+
+`convnextv2_base_gududegenbai3.py` 提供标准 build_model/load_weights/predict 接口。构建时不加载权重，显式加载本地主干目录时校验 SHA256 并移除原 ImageNet 分类层，保持特征主干冻结。运行权重仅保存新的线性分类头，重载时要求模型身份、配置、类别映射及主干 SHA 一致。
+缓存特征训练由 `pipeline/convnext.py` 组织，入口为 `python -m pipeline.convnext`，配置为根目录同名 JSON，操作步骤见 [训练与实验记录](../results/convnextv2_base_gududegenbai3/README.md)。已归档 AutoDL 运行 `convnext_20261025_143320`，原图与镜像训练、原始 test 10,000 张 accuracy 88.44%。历史主干依赖、配置及评分保持原样，原训练源码文本位于该运行的 provenance/。

@@ -1,0 +1,11 @@
+# Use the existing Python 3.12 GPU image; keep its working CUDA wheel pair.
+torch>=2.7,<3
+torchvision>=0.22,<1
+timm==1.0.22
+numpy>=1.26,<3
+Pillow>=10,<13
+huggingface-hub==0.36.0
+safetensors==0.6.2
+scikit-learn==1.7.2
+tqdm>=4.60,<5
+packaging>=20.9,<27

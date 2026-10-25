@@ -1,0 +1,100 @@
+{
+  "note": "Moved without changing original file bytes; original Python sources are audit text only.",
+  "files": [
+    {
+      "source": "convnext_result_20261025_143320/checkpoints/convnextv2_base_gududegenbai3/convnext_20261025_143320/final.pt",
+      "destination": "checkpoints/convnextv2_base_gududegenbai3/convnext_20261025_143320/final.pt",
+      "sha256": "35f5199ea9b581cfbe5b76e59ffeb93d969f2580c70ffcbd12bca0da2449dc60"
+    },
+    {
+      "source": "convnext_result_20261025_143320/results/convnextv2_base_gududegenbai3/convnext_20261025_143320/class_to_idx.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/class_to_idx.json",
+      "sha256": "5e191a5bd43460dc1f2b2a3139c6f4d22ee2988a1a637e98284f29e09871acb0"
+    },
+    {
+      "source": "convnext_result_20261025_143320/results/convnextv2_base_gududegenbai3/convnext_20261025_143320/config_snapshot.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/config_snapshot.json",
+      "sha256": "8f4242401c43b5192793631bef71cc25b5bcd1b8b0a4d4d3c299d7a40a87a861"
+    },
+    {
+      "source": "convnext_result_20261025_143320/results/convnextv2_base_gududegenbai3/convnext_20261025_143320/environment.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/environment.json",
+      "sha256": "5483236f20b2f5e58611f907571edad24c7b88cbfc9593d9e5956e27086b1be8"
+    },
+    {
+      "source": "convnext_result_20261025_143320/results/convnextv2_base_gududegenbai3/convnext_20261025_143320/history.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/history.json",
+      "sha256": "d0f05c0fd0aeb6a6c5c5c6740e82ede6f993124946f34109a1facfb37e7e8cd3"
+    },
+    {
+      "source": "convnext_result_20261025_143320/results/convnextv2_base_gududegenbai3/convnext_20261025_143320/metrics.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/metrics.json",
+      "sha256": "fe55ca4b76cda5e6721c287da9302596570bfa1b7c267ce88cee8d6559f3f573"
+    },
+    {
+      "source": "convnext_result_20261025_143320/results/convnextv2_base_gududegenbai3/convnext_20261025_143320/predictions.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/predictions.json",
+      "sha256": "f7597f1a3af6f8d6124e1c8d16a59fb78443f76ab36e3385f45b6fb533052723"
+    },
+    {
+      "source": "convnext_result_20261025_143320/results/convnextv2_base_gududegenbai3/convnext_20261025_143320/samples.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/samples.json",
+      "sha256": "75865eca1c1c9d1586f26c63bcb4e435edacb7dd3c738d667555acd1fd5944ae"
+    },
+    {
+      "source": "convnext_result_20261025_143320/results/convnextv2_base_gududegenbai3/convnext_20261025_143320/selection_history.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/selection_history.json",
+      "sha256": "55112bdc5c40d5b0a296075d785ff74a415e5aa518f66d389dff529a30b88084"
+    },
+    {
+      "source": "convnext_result_20261025_143320/results/convnextv2_base_gududegenbai3/convnext_20261025_143320/split.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/split.json",
+      "sha256": "e9fbc9e49df8829f50a413b802c9ba4ab3d3e43f6367ad9b535da6f3619a341e"
+    },
+    {
+      "source": "convnext_result_20261025_143320/results/convnextv2_base_gududegenbai3/convnext_20261025_143320/status.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/status.json",
+      "sha256": "0814af8cf6b38adff344f7496788d5662fe642d343df5644ab4c983cbd7905be"
+    },
+    {
+      "source": "convnext_result_20261025_143320/models/convnextv2_base_gududegenbai3.py",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/provenance/convnextv2_base_gududegenbai3.py.txt",
+      "sha256": "e2f28129c29c9d7c7e8f409bac70741c18ca232edad18235869aec8e03801568"
+    },
+    {
+      "source": "convnext_result_20261025_143320/configs/convnextv2_base_gududegenbai3.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/provenance/config.json",
+      "sha256": "56460749083949fd224ee6ec9ae1f1dcba47163e20e661541b1d453545024a21"
+    },
+    {
+      "source": "convnext_result_20261025_143320/convenext/README.md",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/provenance/convenext/README.md",
+      "sha256": "817fa9ba0682465cde84c4893c9c59f047452fae7b513e6e9232ef819e56ca01"
+    },
+    {
+      "source": "convnext_result_20261025_143320/convenext/check_environment.py",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/provenance/convenext/check_environment.py.txt",
+      "sha256": "58fdf3c1ae3e2629694f5955192c657a73c5888c208a1471e48e49b643cbd76b"
+    },
+    {
+      "source": "convnext_result_20261025_143320/convenext/environment.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/provenance/convenext/environment.json",
+      "sha256": "3e9eb08f2e0c494bfbdbedecc8ec9992e303d119c34329a8cb2b735c7462c063"
+    },
+    {
+      "source": "convnext_result_20261025_143320/convenext/requirements.txt",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/provenance/convenext/requirements.txt",
+      "sha256": "fa739f73a152a0eb142cb923c0323640573037f5dacf790371b3a730b0b9db42"
+    },
+    {
+      "source": "convnext_result_20261025_143320/convenext/train_head.py",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/provenance/convenext/train_head.py.txt",
+      "sha256": "8cf52b3b54a3952a68cba8a852e5bd3a2e3350b24d8dbd95f66824be183ce6a0"
+    },
+    {
+      "source": "convnext_result_20261025_143320/.cache/convnextv2_base_gududegenbai3/pretrained.json",
+      "destination": "results/convnextv2_base_gududegenbai3/convnext_20261025_143320/provenance/pretrained.json",
+      "sha256": "c5e640a40d2366738710040c99d7966b4e678d7456872b12da87df31a3f5e1c5"
+    }
+  ]
+}

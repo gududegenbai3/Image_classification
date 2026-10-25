@@ -1,0 +1,27 @@
+[
+  {
+    "epoch": 1,
+    "accuracy": 0.81575,
+    "cross_entropy_loss": 0.8693761472415924
+  },
+  {
+    "epoch": 2,
+    "accuracy": 0.8968,
+    "cross_entropy_loss": 0.36051892004013064
+  },
+  {
+    "epoch": 3,
+    "accuracy": 0.91486,
+    "cross_entropy_loss": 0.2950112735271454
+  },
+  {
+    "epoch": 4,
+    "accuracy": 0.92691,
+    "cross_entropy_loss": 0.2527285907459259
+  },
+  {
+    "epoch": 5,
+    "accuracy": 0.93676,
+    "cross_entropy_loss": 0.22019105802059175
+  }
+]

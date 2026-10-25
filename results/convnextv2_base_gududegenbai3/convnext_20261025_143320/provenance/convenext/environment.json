@@ -1,0 +1,17 @@
+{
+  "python": "3.12",
+  "torch": "2.8.0+cu128",
+  "torchvision": "0.23.0+cu128",
+  "timm": "1.0.22",
+  "cuda_runtime": "12.8",
+  "gpu_compute_capability": [12, 0],
+  "model_name": "convnextv2_base.fcmae_ft_in22k_in1k_384",
+  "model_repository": "timm/convnextv2_base.fcmae_ft_in22k_in1k_384",
+  "input_size": [3, 384, 384],
+  "feature_dim": 1024,
+  "num_classes": 100,
+  "data": {
+    "train_dirs": ["dataset/train", "dataset_mirror/train"],
+    "test_dir": "dataset/test"
+  }
+}

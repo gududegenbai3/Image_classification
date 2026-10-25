@@ -71,3 +71,10 @@ python3 -m pipeline validate --config configs/dinov2_small_gududegenbai3.json
 生成后已逐张核对像素为原图的左右翻转，并核对原图文件哈希未变；`dataset/test/` 未参与变换。
 该目录只保存增强图片，生成过程未留下脚本；整理后增加了 `train/` 层级，与原始数据集的训练层级一致，不含 `test/`。原训练集和镜像集分别保存，测试仍使用 `dataset/test/`。
 公共流程只读取配置中的 `data.train_dir`；单独使用镜像集时应指向 `dataset_mirror/train`，指向上一级会把 `train` 误作类别。原图与镜像的联合加载不由当前公共流程自动完成；配置中的历史增强说明也不会触发合并。历史实验快照中的旧目录描述保持原样。
+
+
+## ConvNeXt 专用训练入口
+
+`python -m pipeline.convnext`（实现位于 `pipeline/convnext.py`）根据 `configs/convnextv2_base_gududegenbai3.json` 联合读取原始训练目录和镜像训练目录，要求类别映射、相对文件名与标签逐项一致；默认校验 50,000 原图、50,000 镜像和 10,000 测试图片。
+先按原图身份、seed 42、类别分层划分：45,000 原图及其镜像用于轮数选择训练（90,000 张），5,000 原图作为验证，其镜像不进入该阶段训练。选定轮数后在完整原图和镜像集（100,000 张）重新拟合，再在原始 test 上评分。逻辑划分保存在 split.json，文件顺序及路径保存在 samples.json，不移动或改写原始图片。
+通用 `python -m pipeline` 仍不自动联合两组训练目录，联合流程由 `python -m pipeline.convnext` 实现。已归档运行 `convnext_20261025_143320` 沿用上述逻辑划分；历史 samples.json 和 split.json 保留原文，入口迁移未改动图片、标签或目录。

@@ -1,0 +1,19 @@
+{
+  "python": "3.12.3",
+  "platform": "Linux-5.15.0-78-generic-x86_64-with-glibc2.35",
+  "packages": {
+    "torch": "2.8.0+cu128",
+    "torchvision": "0.23.0+cu128",
+    "timm": "1.0.22",
+    "Pillow": "11.3.0",
+    "huggingface-hub": "0.36.0",
+    "safetensors": "0.6.2"
+  },
+  "device": "cuda",
+  "cuda_runtime": "12.8",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+  "model_source_sha256": "e2f28129c29c9d7c7e8f409bac70741c18ca232edad18235869aec8e03801568",
+  "runner_sha256": "8cf52b3b54a3952a68cba8a852e5bd3a2e3350b24d8dbd95f66824be183ce6a0",
+  "extraction_precision": "bf16",
+  "pretrained_sha256": "972bcbb8d9965eca7a2f72d9592f54dfc890f9e6aef920cea4269963f46f2f42"
+}
