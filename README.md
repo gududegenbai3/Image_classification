@@ -389,24 +389,21 @@ python -m unittest discover -s tests -v
 
 ### DINOv2 / DINOv3 微调：henry-liyingjie
 
-新增两个独立模型文件、三个固定权重实验，原训练在 RTX 5070 Laptop GPU 上完成。数据按类别使用 seed=42 将原始训练集划为 45,000 / 5,000，实时随机裁剪、水平翻转和颜色扰动只应用于训练。各轮按验证准确率选择权重；本次仅整理和复评，没有重新训练。以下是原始 test 10,000 张的结果：DINOv3 两项已完成 FP32、无 TTA、普通交叉熵复评；DINOv2 按用户要求不复评，沿用原记录。
+本次提交两个模型、各一个最佳检查点。原训练在 RTX 5070 Laptop GPU 上完成，按类别使用 seed 42 将原始训练集划为 45,000 / 5,000，随机裁剪、水平翻转及颜色扰动只用于训练，各轮按验证准确率选择权重；本次整理和检查不重新训练模型。
 
-| 模型 | 运行 | Top-1 | 平均交叉熵 |
-|---|---|---:|---:|
-| `dinov2_small_henry-liyingjie` | `last6_ls01_epoch16` | 91.24% | 0.4810385422 |
-| `dinov3_vitl16_henry-liyingjie` | `last1_ls005_epoch18` | 93.66% | 0.2868556801 |
-| `dinov3_vitl16_henry-liyingjie` | `last2_ls0_epoch10` | 93.42% | 0.3069263343 |
+- DINOv2-Small：最后六层微调，last6_ls01_epoch16；原始 test 10,000 张 Top-1 为 91.24%，原记录交叉熵为 0.48103854219913483。该实验未保存混淆矩阵及逐样本预测，status.json 保持 archived，confusion_matrix 保持 null。经仓库所有者确认，本次作为证据不完整的历史评分归档接收，不追加复评，也不将其视为已满足完整评分证据要求。
+- DINOv3 ViT-L/16：最后一层微调，last1_ls005_epoch18；原始 test 10,000 张 Top-1 为 93.66%，FP32、无 TTA、普通交叉熵为 0.2868556800834438。已提交 100×100 原始整数混淆矩阵，计数总和为 10,000、对角线为 9,366。历史训练 test_loss 使用 0.05 标签平滑，不与此次普通交叉熵混用。
 
-模型实现为 `models/dinov2_small_henry-liyingjie.py` 和 `models/dinov3_vitl16_henry-liyingjie.py`，使用 build_model/load_weights/predict 接口；同名 configs 保存默认实验，各运行快照保存实际配置。`pipeline/henry_submission.py` 提供历史 PIL 直接缩放的固定权重复评入口；这些历史配置不传入通用 `python -m pipeline`，也不声称通用训练能精确重现历史优化过程。
+本 PR 未提交 last2_ls0_epoch10 的参数或评分目录，不将该次实验列为本次交付成果。本次也未提交逐样本预测文件或原训练源码 provenance，不能声称这些材料已经随包交付；已有指标、类别映射、训练历史、实际配置、环境及状态记录均保持原始内容。此次接受 DINOv2 的归档例外不改变其他新模型的完整评分交付要求。
 
-权重目录的 `final.pt` 是元数据与分片清单，必须连同全部 `weights-*.pt` 下载。分片保存原始 FP32 张量，不量化；加载逐片验证 SHA256。DINOv2 保存完整参数，无外部主干依赖；DINOv3 仅保存实际训练过的末层和分类头，需要固定 SHA256 的外部预训练主干。整理时已逐张量验证其余参数等于该主干。配置包含主干架构，模型构建不下载或加载权重。
+模型实现为 models/dinov2_small_henry-liyingjie.py 和 models/dinov3_vitl16_henry-liyingjie.py，均提供 build_model/load_weights/predict；同名 configs 保存默认实验，各运行的 config_snapshot.json 保存实际配置。pipeline/henry_submission.py 是历史 PIL 直接缩放的固定权重复评入口，这些配置不传入通用 python -m pipeline，也不声称通用训练可精确重现历史过程。
 
-DINOv3 运行目录包含原始混淆矩阵和逐样本预测。DINOv2 原记录未保存混淆矩阵或逐样本预测，metrics.json 的 confusion_matrix 为 null，明确标记证据不完整；用户要求不再复评。所有运行均保留类别映射、训练历史、参数清单和原始源码/配置/评分 provenance。DINOv3 单层历史 test_loss 使用 0.05 标签平滑；新 metrics 使用普通交叉熵，原记录保留，不混用。三个实验是已进行过多次探索后的历史结果，不能将测试差异视为独立盲测模型选择。
+final.pt 是元数据与分片清单，需连同其目录内全部 weights-*.pt 使用。各分片是同一个检查点的原始 FP32 参数，不是逐轮权重；加载逐片核对 SHA256。DINOv2 保存完整模型参数，无外部主干依赖；DINOv3 只保存实际训练过的末层与分类头，依赖配置所列固定 revision 和 SHA256 的预训练主干。build_model 不联网或加载权重。
 
-示例（先自行准备获授权的 DINOv3 原始主干目录，包含 model.safetensors）：
+原参数及结果位于：
+- checkpoints/dinov2_small_henry-liyingjie/last6_ls01_epoch16/ 与 results/dinov2_small_henry-liyingjie/last6_ls01_epoch16/。
+- checkpoints/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/ 与 results/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/。
 
-```sh
-python -m pipeline.henry_submission --config results/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/config_snapshot.json --checkpoint checkpoints/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/final.pt --pretrained-dir .cache/pretrained/dinov3_vitl16 --output results/dinov3_vitl16_henry-liyingjie/reeval01
-```
+后续仅在有明确要求时对新输出目录复评；输出目录必须不存在，默认 test 路径为 dataset/test。DINOv3 还需自行准备获授权的固定主干，并通过 --pretrained-dir 传入；DINOv2 不需要该参数。当前不启动这两者的复评。
 
-复评输出目录必须不存在，默认测试路径为 dataset/test；`--data-dir` 可显式指定测试目录。DINOv2 使用相应 config_snapshot/final.pt，省略 --pretrained-dir 即可。原训练使用 timm 1.0.30、Transformers 4.57.6；复评精确版本见 environment.json。`tests/test_henry_submission.py` 检查参数恢复、冻结行为、损坏分片拒绝及已有真实评分证据。
+tests/test_henry_submission.py 核对已提交权重的分片清单、文件哈希、配置与类别映射、DINOv3 混淆矩阵、DINOv2 证据不完整状态，以及微型离线模型的冻结行为、完整/部分参数重载和损坏分片拒绝。微型测试不读取真实图片或产生正式分数。原训练使用 timm 1.0.30、Transformers 4.57.6，实际复评环境见 environment.json。
