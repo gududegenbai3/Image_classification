@@ -32,7 +32,11 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   │   └── …
 │   ├── dinov2_linear_probe/
 │   │   └── …
+│   ├── dinov2_small_henry-liyingjie/
+│   │   └── …
 │   ├── dinov3_vitl16_JackChen070421/
+│   │   └── …
+│   ├── dinov3_vitl16_henry-liyingjie/
 │   │   └── …
 │   └── dinov3_vitl16_yjqsh233/
 │       └── …
@@ -41,7 +45,9 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── convnextv2_base_gududegenbai3.json
 │   ├── dinov2_linear_probe.json
 │   ├── dinov2_small_gududegenbai3.json
+│   ├── dinov2_small_henry-liyingjie.json
 │   ├── dinov3_vitl16_JackChen070421.json
+│   ├── dinov3_vitl16_henry-liyingjie.json
 │   └── dinov3_vitl16_yjqsh233.json
 ├── dataset/
 │   ├── README.md
@@ -56,7 +62,9 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── README.md
 │   ├── convnextv2_base_gududegenbai3.py
 │   ├── dinov2_small_gududegenbai3.py
+│   ├── dinov2_small_henry-liyingjie.py
 │   ├── dinov3_vitl16_JackChen070421.py
+│   ├── dinov3_vitl16_henry-liyingjie.py
 │   └── dinov3_vitl16_yjqsh233.py
 ├── pipeline/
 │   ├── __init__.py
@@ -64,6 +72,7 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── config.py
 │   ├── convnext.py
 │   ├── data.py
+│   ├── henry_submission.py
 │   ├── metrics.py
 │   ├── model_api.py
 │   └── runner.py
@@ -73,7 +82,11 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   │   └── …
 │   ├── dinov2_linear_probe/
 │   │   └── …
+│   ├── dinov2_small_henry-liyingjie/
+│   │   └── …
 │   ├── dinov3_vitl16_JackChen070421/
+│   │   └── …
+│   ├── dinov3_vitl16_henry-liyingjie/
 │   │   └── …
 │   └── dinov3_vitl16_yjqsh233/
 │       └── …
@@ -82,6 +95,7 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── test_convnext_training.py
 │   ├── test_dinov3_evidence.py
 │   ├── test_dinov3_submission.py
+│   ├── test_henry_submission.py
 │   └── test_workflow.py
 └── tools/
     ├── check_convnext_environment.py
@@ -372,3 +386,27 @@ python -m unittest discover -s tests -v
 未安装依赖时，标准库测试可运行，离线 DINOv2 集成测试会明确跳过；安装依赖后，集成测试在临时目录中以微型网络和合成图片验证训练、保存、复评与防覆盖，不下载正式预训练权重、不修改真实数据或历史评分。
 
 实现参考：[PyTorch 参数保存与加载](https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html)、[交叉熵接口](https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html)、[Transformers DINOv2](https://huggingface.co/docs/transformers/v4.50.0/en/model_doc/dinov2)。
+
+### DINOv2 / DINOv3 微调：henry-liyingjie
+
+新增两个独立模型文件、三个固定权重实验，原训练在 RTX 5070 Laptop GPU 上完成。数据按类别使用 seed=42 将原始训练集划为 45,000 / 5,000，实时随机裁剪、水平翻转和颜色扰动只应用于训练。各轮按验证准确率选择权重；本次仅整理和复评，没有重新训练。以下是原始 test 10,000 张的结果：DINOv3 两项已完成 FP32、无 TTA、普通交叉熵复评；DINOv2 按用户要求不复评，沿用原记录。
+
+| 模型 | 运行 | Top-1 | 平均交叉熵 |
+|---|---|---:|---:|
+| `dinov2_small_henry-liyingjie` | `last6_ls01_epoch16` | 91.24% | 0.4810385422 |
+| `dinov3_vitl16_henry-liyingjie` | `last1_ls005_epoch18` | 93.66% | 0.2868556801 |
+| `dinov3_vitl16_henry-liyingjie` | `last2_ls0_epoch10` | 93.42% | 0.3069263343 |
+
+模型实现为 `models/dinov2_small_henry-liyingjie.py` 和 `models/dinov3_vitl16_henry-liyingjie.py`，使用 build_model/load_weights/predict 接口；同名 configs 保存默认实验，各运行快照保存实际配置。`pipeline/henry_submission.py` 提供历史 PIL 直接缩放的固定权重复评入口；这些历史配置不传入通用 `python -m pipeline`，也不声称通用训练能精确重现历史优化过程。
+
+权重目录的 `final.pt` 是元数据与分片清单，必须连同全部 `weights-*.pt` 下载。分片保存原始 FP32 张量，不量化；加载逐片验证 SHA256。DINOv2 保存完整参数，无外部主干依赖；DINOv3 仅保存实际训练过的末层和分类头，需要固定 SHA256 的外部预训练主干。整理时已逐张量验证其余参数等于该主干。配置包含主干架构，模型构建不下载或加载权重。
+
+DINOv3 运行目录包含原始混淆矩阵和逐样本预测。DINOv2 原记录未保存混淆矩阵或逐样本预测，metrics.json 的 confusion_matrix 为 null，明确标记证据不完整；用户要求不再复评。所有运行均保留类别映射、训练历史、参数清单和原始源码/配置/评分 provenance。DINOv3 单层历史 test_loss 使用 0.05 标签平滑；新 metrics 使用普通交叉熵，原记录保留，不混用。三个实验是已进行过多次探索后的历史结果，不能将测试差异视为独立盲测模型选择。
+
+示例（先自行准备获授权的 DINOv3 原始主干目录，包含 model.safetensors）：
+
+```sh
+python -m pipeline.henry_submission --config results/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/config_snapshot.json --checkpoint checkpoints/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/final.pt --pretrained-dir .cache/pretrained/dinov3_vitl16 --output results/dinov3_vitl16_henry-liyingjie/reeval01
+```
+
+复评输出目录必须不存在，默认测试路径为 dataset/test；`--data-dir` 可显式指定测试目录。DINOv2 使用相应 config_snapshot/final.pt，省略 --pretrained-dir 即可。原训练使用 timm 1.0.30、Transformers 4.57.6；复评精确版本见 environment.json。`tests/test_henry_submission.py` 检查参数恢复、冻结行为、损坏分片拒绝及已有真实评分证据。
