@@ -32,7 +32,11 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   │   └── …
 │   ├── dinov2_linear_probe/
 │   │   └── …
+│   ├── dinov2_small_henry-liyingjie/
+│   │   └── …
 │   ├── dinov3_vitl16_JackChen070421/
+│   │   └── …
+│   ├── dinov3_vitl16_henry-liyingjie/
 │   │   └── …
 │   └── dinov3_vitl16_yjqsh233/
 │       └── …
@@ -41,7 +45,9 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── convnextv2_base_gududegenbai3.json
 │   ├── dinov2_linear_probe.json
 │   ├── dinov2_small_gududegenbai3.json
+│   ├── dinov2_small_henry-liyingjie.json
 │   ├── dinov3_vitl16_JackChen070421.json
+│   ├── dinov3_vitl16_henry-liyingjie.json
 │   └── dinov3_vitl16_yjqsh233.json
 ├── dataset/
 │   ├── README.md
@@ -56,7 +62,9 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── README.md
 │   ├── convnextv2_base_gududegenbai3.py
 │   ├── dinov2_small_gududegenbai3.py
+│   ├── dinov2_small_henry-liyingjie.py
 │   ├── dinov3_vitl16_JackChen070421.py
+│   ├── dinov3_vitl16_henry-liyingjie.py
 │   └── dinov3_vitl16_yjqsh233.py
 ├── pipeline/
 │   ├── __init__.py
@@ -64,6 +72,7 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── config.py
 │   ├── convnext.py
 │   ├── data.py
+│   ├── henry_submission.py
 │   ├── metrics.py
 │   ├── model_api.py
 │   └── runner.py
@@ -73,7 +82,11 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   │   └── …
 │   ├── dinov2_linear_probe/
 │   │   └── …
+│   ├── dinov2_small_henry-liyingjie/
+│   │   └── …
 │   ├── dinov3_vitl16_JackChen070421/
+│   │   └── …
+│   ├── dinov3_vitl16_henry-liyingjie/
 │   │   └── …
 │   └── dinov3_vitl16_yjqsh233/
 │       └── …
@@ -82,6 +95,7 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 │   ├── test_convnext_training.py
 │   ├── test_dinov3_evidence.py
 │   ├── test_dinov3_submission.py
+│   ├── test_henry_submission.py
 │   └── test_workflow.py
 └── tools/
     ├── check_convnext_environment.py
@@ -372,3 +386,24 @@ python -m unittest discover -s tests -v
 未安装依赖时，标准库测试可运行，离线 DINOv2 集成测试会明确跳过；安装依赖后，集成测试在临时目录中以微型网络和合成图片验证训练、保存、复评与防覆盖，不下载正式预训练权重、不修改真实数据或历史评分。
 
 实现参考：[PyTorch 参数保存与加载](https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html)、[交叉熵接口](https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html)、[Transformers DINOv2](https://huggingface.co/docs/transformers/v4.50.0/en/model_doc/dinov2)。
+
+### DINOv2 / DINOv3 微调：henry-liyingjie
+
+本次提交两个模型、各一个最佳检查点。原训练在 RTX 5070 Laptop GPU 上完成，按类别使用 seed 42 将原始训练集划为 45,000 / 5,000，随机裁剪、水平翻转及颜色扰动只用于训练，各轮按验证准确率选择权重；本次整理和检查不重新训练模型。
+
+- DINOv2-Small：最后六层微调，last6_ls01_epoch16；原始 test 10,000 张 Top-1 为 91.24%，原记录交叉熵为 0.48103854219913483。该实验未保存混淆矩阵及逐样本预测，status.json 保持 archived，confusion_matrix 保持 null。经仓库所有者确认，本次作为证据不完整的历史评分归档接收，不追加复评，也不将其视为已满足完整评分证据要求。
+- DINOv3 ViT-L/16：最后一层微调，last1_ls005_epoch18；原始 test 10,000 张 Top-1 为 93.66%，FP32、无 TTA、普通交叉熵为 0.2868556800834438。已提交 100×100 原始整数混淆矩阵，计数总和为 10,000、对角线为 9,366。历史训练 test_loss 使用 0.05 标签平滑，不与此次普通交叉熵混用。
+
+本 PR 未提交 last2_ls0_epoch10 的参数或评分目录，不将该次实验列为本次交付成果。本次也未提交逐样本预测文件或原训练源码 provenance，不能声称这些材料已经随包交付；已有指标、类别映射、训练历史、实际配置、环境及状态记录均保持原始内容。此次接受 DINOv2 的归档例外不改变其他新模型的完整评分交付要求。
+
+模型实现为 models/dinov2_small_henry-liyingjie.py 和 models/dinov3_vitl16_henry-liyingjie.py，均提供 build_model/load_weights/predict；同名 configs 保存默认实验，各运行的 config_snapshot.json 保存实际配置。pipeline/henry_submission.py 是历史 PIL 直接缩放的固定权重复评入口，这些配置不传入通用 python -m pipeline，也不声称通用训练可精确重现历史过程。
+
+final.pt 是元数据与分片清单，需连同其目录内全部 weights-*.pt 使用。各分片是同一个检查点的原始 FP32 参数，不是逐轮权重；加载逐片核对 SHA256。DINOv2 保存完整模型参数，无外部主干依赖；DINOv3 只保存实际训练过的末层与分类头，依赖配置所列固定 revision 和 SHA256 的预训练主干。build_model 不联网或加载权重。
+
+原参数及结果位于：
+- checkpoints/dinov2_small_henry-liyingjie/last6_ls01_epoch16/ 与 results/dinov2_small_henry-liyingjie/last6_ls01_epoch16/。
+- checkpoints/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/ 与 results/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/。
+
+后续仅在有明确要求时对新输出目录复评；输出目录必须不存在，默认 test 路径为 dataset/test。DINOv3 还需自行准备获授权的固定主干，并通过 --pretrained-dir 传入；DINOv2 不需要该参数。当前不启动这两者的复评。
+
+tests/test_henry_submission.py 核对已提交权重的分片清单、文件哈希、配置与类别映射、DINOv3 混淆矩阵、DINOv2 证据不完整状态，以及微型离线模型的冻结行为、完整/部分参数重载和损坏分片拒绝。微型测试不读取真实图片或产生正式分数。原训练使用 timm 1.0.30、Transformers 4.57.6，实际复评环境见 environment.json。

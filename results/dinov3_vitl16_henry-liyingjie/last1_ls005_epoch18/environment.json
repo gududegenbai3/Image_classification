@@ -1,0 +1,18 @@
+{
+  "python": "3.14.3",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 5070 Laptop GPU",
+  "dependencies": {
+    "torch": "2.13.0+cu130",
+    "torchvision": "0.28.0+cu130",
+    "timm": "1.0.30",
+    "transformers": "4.57.6",
+    "Pillow": "13.0.0",
+    "safetensors": "0.8.0"
+  },
+  "model_source_sha256": "71216bfd7276f16dfe8ebef48698385bedc3f1b7bb55f3d8049ad7157452a0d3",
+  "evaluation_source_sha256": "b1ed79c1acaaddcce58411ed4826ac3cccc42bd83acf0eaa9234f88c4bf30c44",
+  "checkpoint_sha256": "75c50024413c4998d1c0eaf078c9c83645815056718877f8db6360ebacccc7ee",
+  "elapsed_seconds": 277.80452259996673
+}

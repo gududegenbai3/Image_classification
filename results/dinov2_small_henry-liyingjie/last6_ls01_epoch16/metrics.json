@@ -1,0 +1,12 @@
+{
+  "model_key": "dinov2_small_henry-liyingjie",
+  "run_id": "last6_ls01_epoch16",
+  "split": "test",
+  "samples": 10000,
+  "accuracy": 0.9124,
+  "cross_entropy_loss": 0.48103854219913483,
+  "confusion_matrix": null,
+  "evaluation": "Archived original metrics; no new evaluation requested. Original run did not save confusion matrix or per-sample predictions.",
+  "checkpoint": "checkpoints/dinov2_small_henry-liyingjie/last6_ls01_epoch16/final.pt",
+  "checkpoint_sha256": "87835dc3d78041600b9fd416f006cf148c7935e256ab527e1e0940394da9fb30"
+}
