@@ -1,0 +1,6 @@
+{
+  "source": "original training config",
+  "gpu": "NVIDIA GeForce RTX 5070 Laptop GPU",
+  "reevaluated": false,
+  "checkpoint_sha256": "87835dc3d78041600b9fd416f006cf148c7935e256ab527e1e0940394da9fb30"
+}
