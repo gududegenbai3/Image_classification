@@ -4,7 +4,7 @@
 
 本项目由多人协作，使用公开预训练视觉模型提取图像特征，通过训练新的分类头完成 CIFAR-100 图像分类，并在此基础上逐步探索更先进的模型。
 
-目前包含冻结主干的 DINOv2、DINOv3 线性分类实验，以及 DINOv3 最后两层微调的验证记录。不同实验的训练和选择过程分别保存。
+目前包含冻结主干的 DINOv2、ConvNeXt V2、DINOv3 分类实验，以及 DINOv2 最后六层、DINOv3 最后一层微调的测试记录和 DINOv3 最后两层微调的验证记录。不同实验的训练和选择过程分别保存。
 
 ## 协作入口与项目位置
 
@@ -134,6 +134,11 @@ AI 开始工作前必须读取 [AGENTS.md](AGENTS.md)；其中“所有者专属
 - `configs/dinov2_linear_probe.json`：历史基线的参考配置，保留旧实验的工作流和参数格式；数据路径已修正，但不直接作为新公共命令的配置入口。
 - `models/dinov3_vitl16_yjqsh233.py`：DINOv3 ViT-L/16 单文件适配器，支持末层 CLS 与 patch 均值、最后四层 CLS 与 patch 均值，以及最后两层微调；构建和权重加载分离。
 - `configs/dinov3_vitl16_yjqsh233.json`：DINOv3 基础配置；各已提交实验以各自 `config_snapshot.json` 为准，公共 AdamW 流程不会自动重现历史 SGD 缓存训练。
+
+- models/dinov2_small_henry-liyingjie.py：DINOv2-Small 最后六层微调的独立实现，显式加载完整参数分片。
+- configs/dinov2_small_henry-liyingjie.json：该模型的训练与预处理配置，默认运行 last6_ls01_epoch16。
+- models/dinov3_vitl16_henry-liyingjie.py：DINOv3 最后一层微调的独立实现，加载外部固定主干与实际训练参数分片。
+- configs/dinov3_vitl16_henry-liyingjie.json：该模型固定版本、主干 SHA256、架构和训练配置，默认运行 last1_ls005_epoch18。
 
 ### 公共训练与评估代码
 
@@ -339,6 +344,40 @@ python -m pipeline evaluate --config configs/dinov3_vitl16_JackChen070421.json \
 记录历史增强数据来源与合并方式，其中旧路径描述不代表当前目录位置；公共流程仍只读取 `data.train_dir`，不会自动解释这些说明字段或联合加载镜像集。单独读取镜像训练集时，目录应指向 `dataset_mirror/train`；若需原图与镜像联合训练，需要另行实现并在新实验配置中明确记录。v1 的 `results/dinov3_vitl16_JackChen070421/eval01/config_snapshot.json`
 保持原样，不受影响。
 
+### DINOv2-Small + 最后六层微调（henry-liyingjie）
+
+- **测试 Top-1：91.24%**；**平均交叉熵：0.48103854219913483**。评估集为原始 test 10,000 张、100 类；未记录 Top-5。
+- 模型为 timm 的 vit_small_patch14_dinov2.lvd142m，使用 CLS 特征与 100 类分类头；冻结其余层，微调最后六个 Transformer block 和分类头。
+- 按类别、seed 42 将原始训练集划为 45,000 张训练、5,000 张验证。最多训练 20 轮，按验证准确率选择第 16 轮，最佳验证准确率为 91.70%。训练集实时随机裁剪、水平翻转和颜色扰动，不读取单独的镜像图片目录。
+- AdamW 分组学习率：主干 1e-5、分类头 0.001；weight decay 0.0001，batch 32，训练 label smoothing 0.1。测试预处理为 RGB、双三次直接缩放至 224×224、ImageNet 归一化；历史测试损失按配置记录使用无标签平滑的交叉熵。
+- 模型代码：[dinov2_small_henry-liyingjie.py](models/dinov2_small_henry-liyingjie.py)；基础配置：[同名 JSON](configs/dinov2_small_henry-liyingjie.json)；实际配置与评分：[实验目录](results/dinov2_small_henry-liyingjie/last6_ls01_epoch16/)。
+- [权重目录](checkpoints/dinov2_small_henry-liyingjie/last6_ls01_epoch16/) 中 final.pt 是分片清单，须配合全部 5 个 weights-*.pt 使用；这些分片共同包含完整模型参数，加载该运行不依赖外部预训练主干。
+- **证据状态：不完整的历史评分归档。** 原记录未保存混淆矩阵或逐样本预测，confusion_matrix 保持 null，status 保持 archived。按仓库所有者确认保留，不追加复评，不宣称已满足完整评分证据要求；现有分数和原记录未改写。
+
+### DINOv3 ViT-L/16 + 最后一层微调（henry-liyingjie）
+
+- **测试 Top-1：93.66%**；**平均交叉熵：0.2868556800834438**。评估集为原始 test 10,000 张、100 类，FP32、单次前向、无 TTA；未记录 Top-5。
+- 模型为 Meta facebook/dinov3-vitl16-pretrain-lvd1689m，固定 revision 为 ea8dc2863c51be0a264bab82070e3e8836b02d51；使用 1024 维 CLS 特征及 Linear(1024,100)，只微调最后一个 block 和分类头。
+- 按类别、seed 42 划分 45,000 张训练、5,000 张验证。最多训练 20 轮，选择第 18 轮，最佳验证准确率为 93.98%；随机裁剪、水平翻转和颜色扰动仅用于训练。
+- AdamW 主干学习率 1e-5、分类头学习率 0.001，weight decay 0.0001，batch 8，训练 label smoothing 0.05。测试采用 RGB、双线性直接缩放至 224×224、ImageNet 归一化。**此处报告普通交叉熵，不能与历史带 0.05 标签平滑的 test_loss 混用。**
+- 模型代码：[dinov3_vitl16_henry-liyingjie.py](models/dinov3_vitl16_henry-liyingjie.py)；基础配置：[同名 JSON](configs/dinov3_vitl16_henry-liyingjie.json)；实际配置与评分：[实验目录](results/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/)。
+- [权重目录](checkpoints/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/) 中 final.pt 须配合全部 3 个 weights-*.pt 使用；它们保存实际训练的末层及分类头，需要配置指定版本和 SHA256 的外部 DINOv3 主干。主干 SHA256 为 dcb2e45127cccbf1601e5f42fef165eea275c8e5213197e8dcf3f48822718179。
+- 已保存 100×100 原始整数混淆矩阵，计数总和为 10,000，对角线为 9,366，与 93.66% 一致。逐样本预测文件和原训练源码 provenance 未随 PR 提交，不将其描述为已交付证据。
+
+#### Henry 模型的运行入口与交付范围
+
+两个模型均提供 build_model/load_weights/predict 接口；独立复评入口为 [pipeline/henry_submission.py](pipeline/henry_submission.py)，这些历史配置不直接传入通用 python -m pipeline。运行示例以 DINOv3 为例，必须先自行准备获授权且 SHA256 一致的外部主干：
+
+~~~sh
+python -m pipeline.henry_submission --config results/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/config_snapshot.json --checkpoint checkpoints/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/final.pt --pretrained-dir .cache/pretrained/dinov3_vitl16 --output results/dinov3_vitl16_henry-liyingjie/reeval01
+~~~
+
+以上仅为接口说明，此次不执行复评；输出目录必须不存在。DINOv2 使用自身配置和参数，并省略 --pretrained-dir。两个原训练环境为 RTX 5070 Laptop GPU，精确依赖见各自环境记录。
+
+[tests/test_henry_submission.py](tests/test_henry_submission.py) 核对已有评分与源文件哈希、DINOv2 归档状态、真实参数分片清单，并使用微型离线网络验证冻结行为、完整/部分权重重载及损坏分片拒绝。PR #6 的完整依赖 CI 共 22 项测试通过；该结果不替代真实模型复评。
+
+本次合并实际交付两个实验，不包含 last2_ls0_epoch10 的参数或评分目录，也不将其 93.42% 写入本次交付成果。
+
 ## 环境与使用
 
 建议使用 Python 3.13。先在项目根目录创建隔离环境并安装依赖：
@@ -386,24 +425,3 @@ python -m unittest discover -s tests -v
 未安装依赖时，标准库测试可运行，离线 DINOv2 集成测试会明确跳过；安装依赖后，集成测试在临时目录中以微型网络和合成图片验证训练、保存、复评与防覆盖，不下载正式预训练权重、不修改真实数据或历史评分。
 
 实现参考：[PyTorch 参数保存与加载](https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html)、[交叉熵接口](https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html)、[Transformers DINOv2](https://huggingface.co/docs/transformers/v4.50.0/en/model_doc/dinov2)。
-
-### DINOv2 / DINOv3 微调：henry-liyingjie
-
-本次提交两个模型、各一个最佳检查点。原训练在 RTX 5070 Laptop GPU 上完成，按类别使用 seed 42 将原始训练集划为 45,000 / 5,000，随机裁剪、水平翻转及颜色扰动只用于训练，各轮按验证准确率选择权重；本次整理和检查不重新训练模型。
-
-- DINOv2-Small：最后六层微调，last6_ls01_epoch16；原始 test 10,000 张 Top-1 为 91.24%，原记录交叉熵为 0.48103854219913483。该实验未保存混淆矩阵及逐样本预测，status.json 保持 archived，confusion_matrix 保持 null。经仓库所有者确认，本次作为证据不完整的历史评分归档接收，不追加复评，也不将其视为已满足完整评分证据要求。
-- DINOv3 ViT-L/16：最后一层微调，last1_ls005_epoch18；原始 test 10,000 张 Top-1 为 93.66%，FP32、无 TTA、普通交叉熵为 0.2868556800834438。已提交 100×100 原始整数混淆矩阵，计数总和为 10,000、对角线为 9,366。历史训练 test_loss 使用 0.05 标签平滑，不与此次普通交叉熵混用。
-
-本 PR 未提交 last2_ls0_epoch10 的参数或评分目录，不将该次实验列为本次交付成果。本次也未提交逐样本预测文件或原训练源码 provenance，不能声称这些材料已经随包交付；已有指标、类别映射、训练历史、实际配置、环境及状态记录均保持原始内容。此次接受 DINOv2 的归档例外不改变其他新模型的完整评分交付要求。
-
-模型实现为 models/dinov2_small_henry-liyingjie.py 和 models/dinov3_vitl16_henry-liyingjie.py，均提供 build_model/load_weights/predict；同名 configs 保存默认实验，各运行的 config_snapshot.json 保存实际配置。pipeline/henry_submission.py 是历史 PIL 直接缩放的固定权重复评入口，这些配置不传入通用 python -m pipeline，也不声称通用训练可精确重现历史过程。
-
-final.pt 是元数据与分片清单，需连同其目录内全部 weights-*.pt 使用。各分片是同一个检查点的原始 FP32 参数，不是逐轮权重；加载逐片核对 SHA256。DINOv2 保存完整模型参数，无外部主干依赖；DINOv3 只保存实际训练过的末层与分类头，依赖配置所列固定 revision 和 SHA256 的预训练主干。build_model 不联网或加载权重。
-
-原参数及结果位于：
-- checkpoints/dinov2_small_henry-liyingjie/last6_ls01_epoch16/ 与 results/dinov2_small_henry-liyingjie/last6_ls01_epoch16/。
-- checkpoints/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/ 与 results/dinov3_vitl16_henry-liyingjie/last1_ls005_epoch18/。
-
-后续仅在有明确要求时对新输出目录复评；输出目录必须不存在，默认 test 路径为 dataset/test。DINOv3 还需自行准备获授权的固定主干，并通过 --pretrained-dir 传入；DINOv2 不需要该参数。当前不启动这两者的复评。
-
-tests/test_henry_submission.py 核对已提交权重的分片清单、文件哈希、配置与类别映射、DINOv3 混淆矩阵、DINOv2 证据不完整状态，以及微型离线模型的冻结行为、完整/部分参数重载和损坏分片拒绝。微型测试不读取真实图片或产生正式分数。原训练使用 timm 1.0.30、Transformers 4.57.6，实际复评环境见 environment.json。
