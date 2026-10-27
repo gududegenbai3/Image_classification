@@ -48,3 +48,8 @@
 
 `convnextv2_base_gududegenbai3.py` 提供标准 build_model/load_weights/predict 接口。构建时不加载权重，显式加载本地主干目录时校验 SHA256 并移除原 ImageNet 分类层，保持特征主干冻结。运行权重仅保存新的线性分类头，重载时要求模型身份、配置、类别映射及主干 SHA 一致。
 缓存特征训练由 `pipeline/convnext.py` 组织，入口为 `python -m pipeline.convnext`，配置为根目录同名 JSON，操作步骤见 [训练与实验记录](../results/convnextv2_base_gududegenbai3/README.md)。已归档 AutoDL 运行 `convnext_20261025_143320`，原图与镜像训练、原始 test 10,000 张 accuracy 88.44%。历史主干依赖、配置及评分保持原样，原训练源码文本位于该运行的 provenance/。
+
+
+## henry-liyingjie
+
+DINOv2 与 DINOv3 微调接口及分片权重说明见根 README 对应章节。配置记录历史 PIL 预处理；固定权重复评入口为 `python -m pipeline.henry_submission`，不能把配置直接传给通用训练入口。
